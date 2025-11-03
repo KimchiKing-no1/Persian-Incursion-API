@@ -13,7 +13,8 @@ except Exception:
 app = FastAPI(
     title="Persian Incursion Strategy API",
     version="0.2.0",
-    description="Authoritative rules + action enumerator to bound MyGPT"
+    description="Authoritative rules + action enumerator to bound MyGPT",
+    servers=[{"url": "https://persian-incursion-api.onrender.com"}]  # <-- add this
 )
 
 # -------- Models aligned with your JSON samples --------
@@ -195,3 +196,4 @@ def plan_suggest(req: EnumerateActionsRequest):
     plan = {"objective": "Disrupt high-value facilities while gaining intel",
             "steps": [{"action_id": a.action_id, "rationale": a.description} for a in picks]}
     return {"nonce": nonce, "plan": plan}
+
