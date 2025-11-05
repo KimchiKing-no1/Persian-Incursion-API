@@ -258,7 +258,7 @@ def state_validate(payload: GameState):
     return {"ok": True, "warnings": warn, "note": note}
 
 @app.post("/state/canonicalize")
-def state_canonicalize(payload: Dict[str, Any]):
+def state_canonicalize(payload: Dict[str, Any] = Body(..., example={"turn": {"turn_number": 5, "phase": "morning"}})):
     ctx = ctx_from_state(payload)
     return {
         "ok": True,
@@ -268,6 +268,20 @@ def state_canonicalize(payload: Dict[str, Any]):
         "ready_counts": {k: len(v) for k, v in ctx["ready"].items()},
         "targets_alive": len(ctx["alive_targets"]),
     }
+
+@app.post("/advisory/victory")
+def advisory_victory(payload: Dict[str, Any] = Body(..., example={"turn": {"turn_number": 5, "phase": "morning"}})):
+    ctx = ctx_from_state(payload)
+    oil = _oil_victory_snapshot(payload)
+    nuke = _nuclear_victory_snapshot(payload)
+    return {
+        "ok": True,
+        "turn": ctx["turn_number"],
+        "phase": ctx["phase"],
+        "oil": oil,
+        "nuclear": nuke
+    }
+
 
 # ---------- Action enumeration (engine-backed + dynamic gates) ----------
 def _engine_actions(sdict: Dict[str, Any], side: str) -> List[Dict[str, Any]]:
@@ -543,21 +557,6 @@ def plan_score(req: NoncedPlan):
         }
     }
     
-@app.post("/advisory/victory")
-def advisory_victory(payload: Dict[str, Any]):
-    try:
-        ctx = ctx_from_state(payload)
-    except HTTPException as e:
-        raise e
-    oil = _oil_victory_snapshot(payload)
-    nuke = _nuclear_victory_snapshot(payload)
-    return {
-        "ok": True,
-        "turn": ctx["turn_number"],
-        "phase": ctx["phase"],
-        "oil": oil,
-        "nuclear": nuke
-    }
 @app.get("/")
 def root():
     return {
@@ -601,5 +600,6 @@ def terms():
     <h2>Terms of Use</h2>
     <p>This API is for research and entertainment. Use at your own risk.</p>
     """)
+
 
 
