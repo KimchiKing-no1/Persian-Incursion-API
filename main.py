@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from fastapi.openapi.utils import get_openapi
 
 # ---------- Errors ----------
 class StateError(HTTPException):
@@ -24,6 +25,24 @@ app = FastAPI(
     description="Authoritative rules + action enumerator to bound MyGPT",
     servers=[{"url": "https://persian-incursion-api.onrender.com"}]
 )
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title="Persian Incursion Strategy API",
+        version="0.3.0",
+        description="Authoritative rules + action enumerator to bound MyGPT",
+        routes=app.routes,
+    )
+    # IMPORTANT: add a public https URL here
+    schema["servers"] = [
+        {"url": "https://persian-incursion-api.onrender.com", "description": "prod"}
+    ]
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 # ---------- Helpers ----------
 def _checksum(obj: Any) -> str:
@@ -603,6 +622,7 @@ def terms():
     <h2>Terms of Use</h2>
     <p>This API is for research and entertainment. Use at your own risk.</p>
     """)
+
 
 
 
