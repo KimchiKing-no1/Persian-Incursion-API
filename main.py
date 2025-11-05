@@ -1,91 +1,43 @@
-import hashlib, json 
-import uuid
-import importlib
+import hashlib, json, uuid, importlib
+from typing import Any, Dict, List, Optional
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from typing import Any, Dict, List, Optional, Tuple
+from pydantic import BaseModel, Field
 
-
+# ---------- Errors ----------
 class StateError(HTTPException):
     def __init__(self, msg: str):
         super().__init__(status_code=422, detail=msg)
 
-ge = importlib.import_module("game_engine")  # you already ship this
+# ---------- External rules/engine ----------
+rules_blob = importlib.import_module("rules_blob")   # your rules tables
+try:
+    ge = importlib.import_module("game_engine")      # engine helpers (legal actions, income, etc.)
+except Exception:
+    ge = None
 
-def _alive_targets(state_dict):
+# ---------- App ----------
+app = FastAPI(
+    title="Persian Incursion Strategy API",
+    version="0.3.0",
+    description="Authoritative rules + action enumerator to bound MyGPT",
+    servers=[{"url": "https://persian-incursion-api.onrender.com"}]
+)
+
+# ---------- Helpers ----------
+def _checksum(obj: Any) -> str:
+    return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+def _alive_targets(state_dict: Dict[str, Any]) -> List[str]:
     ti = state_dict.get("ti") or {}
     return [name for name, meta in ti.items() if not meta.get("destroyed", False)]
 
-def _day_phase(state_dict):
-    ph = (state_dict.get("turn") or {}).get("phase","").lower()
-    return ph in ("morning","afternoon")
-
-@app.post("/actions/enumerate")
-def actions_enumerate(req: EnumerateActionsRequest):
-    sdict = req.state.dict(by_alias=True)  # exact user state, no invention
-    side = req.side_to_move.lower()
-
-    # hard gates the rules expect
-    if side == "israel" and not _day_phase(sdict):
-        raise HTTPException(422, detail="Air operations must be launched in Day phases per rules.")
-
-    # generate with your engine (respects costs/corridors/cards)
-    eng = ge.GameEngine()
-    legal = eng.get_legal_actions(sdict, side=side)
-
-    # filter engine’s output to current alive targets & readiness
-    alive = set(_alive_targets(sdict))
-    ready = {
-      "israel": {sq["id"] for sq in (sdict.get("as") or {}).get("israel_squadrons",[]) if (sq.get("st","").lower()=="ready")},
-      "iran":   {sq["id"] for sq in (sdict.get("as") or {}).get("iran_squadrons",[])   if (sq.get("st","").lower()=="ready")}
-    }
-    pruned = []
-    for a in legal:
-        if a["type"] == "Order Airstrike":
-            if a.get("target") not in alive: 
-                continue
-            # no night frag; require at least one Ready squadron present
-            if not ready["israel"]:
-                continue
-        if a["type"] == "Relocate SAM":
-            # allowed only AFTER overt attack per rules
-            if not (sdict.get("meta") or {}).get("israel_overt_attack_done", False):
-                continue
-        pruned.append(a)
-
-    # convert to your EnumeratedAction shape
-    out = []
-    for i, a in enumerate(pruned[: (req.max_actions or 60)]):
-        out.append({
-          "action_id": f"{uuid.uuid4()}",
-          "kind": a["type"],
-          "description": a.get("target") and f"{a['type']} → {a['target']}" or a["type"],
-          "preconditions": a.get("preconditions", []),
-          "cost": a.get("cost", {}),
-          "tags": a.get("tags", [])
-        })
-
-    nonce = f"N-{hashlib.sha256(json.dumps(sdict, sort_keys=True).encode()).hexdigest()[:12]}-{side[:2]}"
-    _universes[nonce] = {x["action_id"]: x for x in out}
-    return {"nonce": nonce, "side_to_move": req.side_to_move, "actions": out}
-
-def _get(state: Dict[str, Any], path: List[str], *, required=True):
-    cur = state
-    for p in path:
-        if isinstance(cur, dict) and p in cur:
-            cur = cur[p]
-        else:
-            if required:
-                raise StateError(f"Missing required key: {'.'.join(path)}")
-            return None
-    return cur
-
-def _checksum(obj: Any) -> str:
-    return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",",":")).encode()).hexdigest()[:16]
+def _day_phase(state_dict: Dict[str, Any]) -> bool:
+    ph = (state_dict.get("turn") or {}).get("phase", "")
+    return str(ph).lower() in ("morning", "afternoon")
 
 def ctx_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
-    """Strictly extract everything from the user's JSON file, no defaults."""
     turn = state.get("turn", {})
     turn_number = turn.get("turn_number")
     phase = str(turn.get("phase", "")).lower()
@@ -99,15 +51,12 @@ def ctx_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
     air = state.get("as")
     if not air:
         raise HTTPException(422, detail="Missing air-side structure 'as'")
-    isr_ready = [s["id"] for s in air.get("israel_squadrons", []) if str(s.get("st","")).lower()=="ready"]
-    irn_ready = [s["id"] for s in air.get("iran_squadrons", []) if str(s.get("st","")).lower()=="ready"]
+    isr_ready = [s["id"] for s in air.get("israel_squadrons", []) if str(s.get("st", "")).lower() == "ready"]
+    irn_ready = [s["id"] for s in air.get("iran_squadrons", []) if str(s.get("st", "")).lower() == "ready"]
 
-    ti = state.get("ti") or {}
-    alive_targets = [k for k,v in ti.items() if not v.get("destroyed", False)]
-
+    alive_targets = _alive_targets(state)
     meta = state.get("meta") or {}
     overt = bool(meta.get("israel_overt_attack_done", False))
-    real_world = bool(meta.get("real_world", False))
 
     return {
         "turn_number": int(turn_number),
@@ -115,27 +64,12 @@ def ctx_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
         "resources": resources,
         "ready": {"israel": isr_ready, "iran": irn_ready},
         "alive_targets": alive_targets,
-        "flags": {"israel_overt_attack_done": overt, "real_world": real_world},
-        "checksum": _checksum(state),
+        "flags": {"israel_overt_attack_done": overt},
+        "checksum": _checksum(state)[:12],
         "raw": state,
     }
 
-
-# ---- bring in your rules & (optionally) engine helpers ----
-rules_blob = importlib.import_module("rules_blob")   # your file
-try:
-    ge = importlib.import_module("game_engine")      # optional use
-except Exception:
-    ge = None
-
-app = FastAPI(
-    title="Persian Incursion Strategy API",
-    version="0.2.0",
-    description="Authoritative rules + action enumerator to bound MyGPT",
-    servers=[{"url": "https://persian-incursion-api.onrender.com"}]  # <-- add this
-)
-
-# -------- Models aligned with your JSON samples --------
+# ---------- Models ----------
 class Squadron(BaseModel):
     id: str
     ty: str
@@ -160,6 +94,8 @@ class GameState(BaseModel):
     opinion: Optional[dict] = None
     players: Optional[dict] = None
     meta: Optional[dict] = None
+    turn: Optional[dict] = None
+    resources: Optional[dict] = None  # ensure present for ctx checks
 
 class EnumerateActionsRequest(BaseModel):
     state: GameState
@@ -181,162 +117,35 @@ class PlanStep(BaseModel):
 class Plan(BaseModel):
     objective: Optional[str] = None
     steps: List[PlanStep] = []
+    # required: API must bind the plan to the exact state used for enumeration
+    state: Dict[str, Any]
 
 class NoncedPlan(BaseModel):
     nonce: str
     plan: Plan
 
-# -------- in-memory nonce→universe --------
-_universes: Dict[str, Dict[str, EnumeratedAction]] = {}
+# ---------- Universes (nonce → action_id → EnumeratedAction) ----------
+_UNIVERSES: Dict[str, Dict[str, EnumeratedAction]] = {}
 
+# ---------- Health ----------
 @app.get("/health")
 def health():
-    return {"ok": True, "service": "PI-API", "version": "0.2.0"}
+    return {"ok": True, "service": "PI-API", "version": "0.3.0"}
 
+# ---------- State validate / canonicalize ----------
 @app.post("/state/validate")
 def state_validate(payload: GameState):
-    # Basic shape checks: do we see expected keys from your samples?
     warn = []
     if not payload.as_.israel_squadrons:
         warn.append("No israel_squadrons found")
     if not payload.ti:
         warn.append("No target intelligence (ti) found")
-    # Optional: apply opinion income using your GameEngine
-    income_note = None
+    note = None
     if ge and hasattr(ge, "apply_morning_opinion_income"):
         s = payload.dict(by_alias=True)
         ge.apply_morning_opinion_income(s, carry_cap=None, log_fn=None)
-        income_note = "Opinion income applied (PP/IP/MP updated)"
-    return {"ok": True, "warnings": warn, "note": income_note}
-
-# ---- Simple, safe enumerator (replace with your full rules later) ----
-def _ready(sq: Squadron): return (sq.st or "").lower() == "ready"
-
-def _derive_actions(state: Dict[str, Any], side_to_move: str) -> List[EnumeratedAction]:
-    ctx = ctx_from_state(state)
-    side = side_to_move.lower()
-    acts: List[EnumeratedAction] = []
-
-    # Phase restriction: only day operations for airstrikes / recon
-    def day_only() -> bool: return ctx["phase"] in ("morning", "afternoon")
-
-    res = ctx["resources"][side]
-    ready = ctx["ready"][side]
-    targets = ctx["alive_targets"]
-
-    if side == "israel":
-        if res["mp"] > 0 and ready and day_only():
-            for tgt in targets[:10]:
-                aid = str(uuid.uuid4())
-                acts.append(EnumeratedAction(
-                    action_id=aid,
-                    kind="AirStrike",
-                    description=f"Airstrike on {tgt} using available Israeli squadrons",
-                    preconditions=["Day phase", "At least one Ready squadron"],
-                    cost={"mp": 1},
-                    tags=["offense"]
-                ))
-        if ready and day_only():
-            aid = str(uuid.uuid4())
-            acts.append(EnumeratedAction(
-                action_id=aid,
-                kind="Recon",
-                description="Daytime recon mission near front sectors",
-                preconditions=["Day phase", "Weather OK"],
-                cost={"mp": 0.5},
-                tags=["intel"]
-            ))
-
-    elif side == "iran":
-        if res["mp"] > 0 and ready and day_only():
-            aid = str(uuid.uuid4())
-            acts.append(EnumeratedAction(
-                action_id=aid,
-                kind="InterceptCAP",
-                description="Establish CAP over Tehran or major SAM zones",
-                preconditions=["Day phase", "GCI available"],
-                cost={"mp": 0.7},
-                tags=["defense"]
-            ))
-        if ctx["flags"]["israel_overt_attack_done"] and res["ip"] > 0:
-            aid = str(uuid.uuid4())
-            acts.append(EnumeratedAction(
-                action_id=aid,
-                kind="RelocateSAM",
-                description="Move one SAM battery to a new node",
-                preconditions=["Post-overt-attack only"],
-                cost={"ip": 1},
-                tags=["air-defense"]
-            ))
-    return acts
-
-
-@app.post("/actions/enumerate")
-def actions_enumerate(req: EnumerateActionsRequest):
-    actions = _derive_actions(req.state.dict(by_alias=True), req.side_to_move)
-    actions = actions[: (req.max_actions or 60)]
-    nonce = f"N-{_checksum(req.state.dict(by_alias=True))}-{req.side_to_move[:2].lower()}"
-    _universes[nonce] = {a.action_id: a for a in actions}
-    return {
-        "nonce": nonce,
-        "side_to_move": req.side_to_move,
-        "turn_phase": req.state.dict().get("turn"),
-        "actions": [a.dict() for a in actions]
-    }
-
-
-@app.post("/plan/validate")
-def plan_validate(req: NoncedPlan):
-    uni = _universes.get(req.nonce)
-    if not uni:
-        raise HTTPException(400, "Unknown/expired nonce. Re-enumerate.")
-
-    # bind to state checksum hidden in nonce
-    plan_state = getattr(req.plan, "state", None)
-    if not plan_state:
-        return {"ok": False, "illegal_steps":[{"index":0,"reason":"plan.state missing"}]}
-    cs = hashlib.sha256(json.dumps(plan_state, sort_keys=True).encode()).hexdigest()[:12]
-    if f"N-{cs}" not in req.nonce:
-        return {"ok": False, "illegal_steps":[{"index":0,"reason":"state/nonce mismatch"}]}
-
-    illegal = []
-    for i, st in enumerate(req.plan.steps):
-        if st.action_id not in uni:
-            illegal.append({"index": i, "action_id": st.action_id, "reason": "Not in legal action set"})
-    # optional: oil/nuclear flags sanity (advisory)
-    return {"ok": len(illegal)==0, "illegal_steps": illegal}
-
-
-@app.post("/plan/score")
-def plan_score(req: NoncedPlan):
-    uni = _universes.get(req.nonce)
-    if not uni:
-        raise HTTPException(400, "Unknown/expired nonce. Re-enumerate.")
-    score = 0.0
-    breakdown = {"damage": 0.0, "intel": 0.0, "resource_cost": 0.0}
-    for s in req.plan.steps:
-        a = uni.get(s.action_id)
-        if not a: 
-            continue
-        if a.kind == "AirStrike":
-            breakdown["damage"] += 4.0
-            breakdown["resource_cost"] -= 1.5
-        elif a.kind in ("Recon","InterceptCAP"):
-            breakdown["intel"] += 1.0 if a.kind == "Recon" else 0.2
-            breakdown["resource_cost"] -= 0.5
-    total = breakdown["damage"] + breakdown["intel"] + breakdown["resource_cost"]
-    return {"total": round(total, 3), "breakdown": {k: round(v, 3) for k, v in breakdown.items()}}
-
-# Optional: server baseline plan for A/B
-@app.post("/plan/suggest")
-def plan_suggest(req: EnumerateActionsRequest):
-    actions = _derive_actions(req.state, req.side_to_move)
-    nonce = str(uuid.uuid4())
-    _universes[nonce] = {a.action_id: a for a in actions}
-    picks = [a for a in actions if a.kind == "AirStrike"][:2] + [a for a in actions if a.kind == "Recon"][:1]
-    plan = {"objective": "Disrupt high-value facilities while gaining intel",
-            "steps": [{"action_id": a.action_id, "rationale": a.description} for a in picks]}
-    return {"nonce": nonce, "plan": plan}
+        note = "Opinion income computed (not persisted)"
+    return {"ok": True, "warnings": warn, "note": note}
 
 @app.post("/state/canonicalize")
 def state_canonicalize(payload: Dict[str, Any]):
@@ -347,6 +156,178 @@ def state_canonicalize(payload: Dict[str, Any]):
         "turn": ctx["turn_number"],
         "phase": ctx["phase"],
         "ready_counts": {k: len(v) for k, v in ctx["ready"].items()},
-        "targets_alive": len(ctx["alive_targets"])
+        "targets_alive": len(ctx["alive_targets"]),
     }
 
+# ---------- Action enumeration (engine-backed + dynamic gates) ----------
+def _engine_actions(sdict: Dict[str, Any], side: str) -> List[Dict[str, Any]]:
+    if not ge:
+        return []
+    eng = ge.GameEngine()
+    return eng.get_legal_actions(sdict, side=side)  # engine respects costs/corridors/cards  # noqa
+
+def _derive_actions(state_dict: Dict[str, Any], side_to_move: str) -> List[EnumeratedAction]:
+    ctx = ctx_from_state(state_dict)
+    side = side_to_move.lower()
+
+    # Day-only gate for launching air ops (per rules)
+    if side == "israel" and ctx["phase"] not in ("morning", "afternoon"):
+        raise HTTPException(422, detail="Air operations must be launched in Day phases.")
+
+    engine_out = _engine_actions(state_dict, side)
+    alive = set(ctx["alive_targets"])
+    ready = {
+        "israel": set(ctx["ready"]["israel"]),
+        "iran": set(ctx["ready"]["iran"]),
+    }
+
+    pruned: List[EnumeratedAction] = []
+    for a in engine_out:
+        atype = a.get("type", "")
+        # Filter based on state reality
+        if atype == "Order Airstrike":
+            if not ready["israel"]:
+                continue
+            tgt = a.get("target")
+            if tgt not in alive:
+                continue
+        if atype == "Relocate SAM":
+            if not ctx["flags"]["israel_overt_attack_done"]:
+                continue
+
+        ea = EnumeratedAction(
+            action_id=str(uuid.uuid4()),
+            kind=atype,
+            description=(f"{atype} → {a.get('target')}" if a.get("target") else atype),
+            preconditions=a.get("preconditions", []),
+            cost=a.get("cost", {}),
+            tags=a.get("tags", []),
+        )
+        pruned.append(ea)
+
+    # If engine provides nothing (early scaffolding), offer minimal legal shells
+    if not pruned:
+        if side == "israel" and ready["israel"] and ctx["phase"] in ("morning", "afternoon"):
+            for tgt in list(alive)[:8]:
+                pruned.append(EnumeratedAction(
+                    action_id=str(uuid.uuid4()),
+                    kind="AirStrike",
+                    description=f"Airstrike → {tgt}",
+                    preconditions=["Day phase", "≥1 Ready squadron"],
+                    cost={"mp": 1.0},
+                    tags=["offense"],
+                ))
+            pruned.append(EnumeratedAction(
+                action_id=str(uuid.uuid4()),
+                kind="Recon",
+                description="Daytime recon in front sectors",
+                preconditions=["Day phase", "Weather OK"],
+                cost={"mp": 0.5},
+                tags=["intel"],
+            ))
+        if side == "iran" and ready["iran"] and ctx["phase"] in ("morning", "afternoon"):
+            pruned.append(EnumeratedAction(
+                action_id=str(uuid.uuid4()),
+                kind="InterceptCAP",
+                description="Establish CAP over critical SAM zones",
+                preconditions=["Day phase", "GCI available"],
+                cost={"mp": 0.7},
+                tags=["defense"],
+            ))
+            if ctx["flags"]["israel_overt_attack_done"]:
+                pruned.append(EnumeratedAction(
+                    action_id=str(uuid.uuid4()),
+                    kind="Relocate SAM",
+                    description="Move one SAM battery to a new node (post-overt only)",
+                    preconditions=["Post-overt-attack only"],
+                    cost={"ip": 1.0},
+                    tags=["air-defense"],
+                ))
+    return pruned
+
+@app.post("/actions/enumerate")
+def actions_enumerate(req: EnumerateActionsRequest):
+    sdict = req.state.dict(by_alias=True)
+    actions = _derive_actions(sdict, req.side_to_move)
+    actions = actions[: (req.max_actions or 60)]
+
+    cs = _checksum(sdict)[:12]
+    nonce = f"N-{cs}-{req.side_to_move[:2].lower()}"
+    _UNIVERSES[nonce] = {a.action_id: a for a in actions}
+
+    return {
+        "nonce": nonce,
+        "side_to_move": req.side_to_move,
+        "turn_phase": sdict.get("turn"),
+        "actions": [a.dict() for a in actions],
+    }
+
+# ---------- Plan validate ----------
+@app.post("/plan/validate")
+def plan_validate(req: NoncedPlan):
+    uni = _UNIVERSES.get(req.nonce)
+    if not uni:
+        raise HTTPException(400, "Unknown/expired nonce. Re-enumerate.")
+
+    # bind to state checksum encoded in nonce
+    plan_state = req.plan.state if isinstance(req.plan.state, dict) else None
+    if not plan_state:
+        return {"ok": False, "illegal_steps": [{"index": 0, "reason": "plan.state missing"}]}
+
+    cs = _checksum(plan_state)[:12]
+    if not req.nonce.startswith(f"N-{cs}-"):
+        return {"ok": False, "illegal_steps": [{"index": 0, "reason": "state/nonce mismatch"}]}
+
+    illegal = []
+    for i, st in enumerate(req.plan.steps):
+        if st.action_id not in uni:
+            illegal.append({"index": i, "action_id": st.action_id, "reason": "Not in legal action set"})
+    return {"ok": len(illegal) == 0, "illegal_steps": illegal}
+
+# ---------- Plan score (simple, deterministic) ----------
+@app.post("/plan/score")
+def plan_score(req: NoncedPlan):
+    uni = _UNIVERSES.get(req.nonce)
+    if not uni:
+        raise HTTPException(400, "Unknown/expired nonce. Re-enumerate.")
+
+    dmg = intel = 0.0
+    cost = 0.0
+    for st in req.plan.steps:
+        a = uni.get(st.action_id)
+        if not a:
+            continue
+        if a.kind == "AirStrike":
+            dmg += 4.0
+            cost -= float(a.cost.get("mp", 1.5))
+        elif a.kind == "Recon":
+            intel += 1.0
+            cost -= float(a.cost.get("mp", 0.5))
+        elif a.kind == "InterceptCAP":
+            intel += 0.2
+            cost -= float(a.cost.get("mp", 0.5))
+        elif a.kind == "Relocate SAM":
+            cost -= 0.25 * float(a.cost.get("ip", 1.0))
+
+    total = round(dmg + intel + cost, 3)
+    return {"total": total, "breakdown": {"damage": round(dmg, 3), "intel": round(intel, 3), "resource_cost": round(cost, 3)}}
+
+# ---------- Baseline suggest (optional A/B for the model) ----------
+@app.post("/plan/suggest")
+def plan_suggest(req: EnumerateActionsRequest):
+    sdict = req.state.dict(by_alias=True)
+    actions = _derive_actions(sdict, req.side_to_move)
+    nonce = f"N-{_checksum(sdict)[:12]}-{req.side_to_move[:2].lower()}"
+    _UNIVERSES[nonce] = {a.action_id: a for a in actions}
+
+    picks = [a for a in actions if a.kind == "AirStrike"][:2]
+    recon = next((a for a in actions if a.kind == "Recon"), None)
+    if recon:
+        picks.append(recon)
+
+    plan = {
+        "objective": "Disrupt high-value facilities while gaining intel",
+        "steps": [{"action_id": a.action_id, "rationale": a.description} for a in picks],
+        "state": sdict,
+    }
+    return {"nonce": nonce, "plan": plan}
