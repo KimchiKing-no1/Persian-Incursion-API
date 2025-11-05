@@ -2,7 +2,7 @@ import hashlib, json, uuid, importlib, copy
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Body
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel, Field
 from fastapi.openapi.utils import get_openapi
 
@@ -277,10 +277,9 @@ def state_validate(payload: GameState):
     return {"ok": True, "warnings": warn, "note": note}
 
 @app.post("/state/canonicalize")
-def state_canonicalize(
-    payload: Dict[str, Any] = Body(..., example={"turn": {"turn_number": 5, "phase": "morning"}})
-):
-    ctx = ctx_from_state(payload)
+def state_canonicalize(payload: GameState):
+    sdict = payload.dict(by_alias=True)
+    ctx = ctx_from_state(sdict)
     return {
         "ok": True,
         "checksum": ctx["checksum"],
@@ -292,10 +291,11 @@ def state_canonicalize(
 
 
 @app.post("/advisory/victory")
-def advisory_victory(payload: Dict[str, Any] = Body(..., example={"turn": {"turn_number": 5, "phase": "morning"}})):
-    ctx = ctx_from_state(payload)
-    oil = _oil_victory_snapshot(payload)
-    nuke = _nuclear_victory_snapshot(payload)
+def advisory_victory(payload: GameState):
+    sdict = payload.dict(by_alias=True)
+    ctx = ctx_from_state(sdict)
+    oil = _oil_victory_snapshot(sdict)
+    nuke = _nuclear_victory_snapshot(sdict)
     return {
         "ok": True,
         "turn": ctx["turn_number"],
@@ -303,6 +303,7 @@ def advisory_victory(payload: Dict[str, Any] = Body(..., example={"turn": {"turn
         "oil": oil,
         "nuclear": nuke
     }
+
 
 
 # ---------- Action enumeration (engine-backed + dynamic gates) ----------
@@ -622,6 +623,7 @@ def terms():
     <h2>Terms of Use</h2>
     <p>This API is for research and entertainment. Use at your own risk.</p>
     """)
+
 
 
 
