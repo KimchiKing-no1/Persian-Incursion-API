@@ -1,4 +1,4 @@
-import hashlib, json, uuid, importlib
+import hashlib, json, uuid, importlib, copy
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
@@ -68,6 +68,114 @@ def ctx_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
         "checksum": _checksum(state)[:12],
         "raw": state,
     }
+    
+def _oil_victory_snapshot(state_dict: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not ge:
+        return None
+    try:
+        eng = ge.GameEngine()
+        s = copy.deepcopy(state_dict)
+        # Use the engine's oil recompute helper (safe to call; updates s in-place)
+        if hasattr(eng, "_recompute_oil_production"):
+            eng._recompute_oil_production(s)
+        os = s.get("oil_status", {})
+        vf = s.get("victory_flags", {})
+        totals = os.get("totals", {})
+        hit = os.get("hit", {})
+        # percentages
+        crude_pct = 0 if not totals.get("crude") else int(100 * hit.get("crude", 0) / totals["crude"])
+        ref_pct   = 0 if not totals.get("refinery") else int(100 * hit.get("refinery", 0) / totals["refinery"])
+        return {
+            "crude_pct": crude_pct,
+            "refinery_pct": ref_pct,
+            "win": bool(vf.get("israel_oil_strategy_success", False)),
+        }
+    except Exception:
+        return None
+        
+def _nuclear_victory_snapshot(state_dict: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Best-effort nuclear readiness advisory:
+    1) Prefer engine API (e.g., eng.nuclear_status or victory flags)
+    2) Else, use rules_blob.NUCLEAR_SITES if present
+    3) Else, heuristic: count ti entries that look nuclear by name/tags
+    Returns dict with counts and a conservative 'ready' boolean if an engine/victory flag exists.
+    """
+    if not state_dict:
+        return None
+
+    # 1) Prefer engine
+    try:
+        if ge:
+            eng = ge.GameEngine()
+            # If engine exposes a nuclear status/victory flag, use it
+            # Try victory_flags first (common pattern)
+            s = copy.deepcopy(state_dict)
+            vf = (s.get("victory_flags") or {})
+            if "israel_nuclear_program_neutralized" in vf:
+                return {
+                    "destroyed": None,
+                    "total": None,
+                    "ready": bool(vf["israel_nuclear_program_neutralized"]),
+                    "source": "victory_flags"
+                }
+            # Or a method if provided
+            if hasattr(eng, "nuclear_status"):
+                try:
+                    ns = eng.nuclear_status(s)  # should return something structured
+                    return {
+                        "destroyed": ns.get("destroyed"),
+                        "total": ns.get("total"),
+                        "ready": bool(ns.get("ready", False)),
+                        "source": "engine"
+                    }
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # 2) Use rules table if present
+    nuclear_sites = []
+    try:
+        nuclear_sites = getattr(rules_blob, "NUCLEAR_SITES", [])
+    except Exception:
+        nuclear_sites = []
+
+    # 3) Fallback heuristic: find nuclear-looking targets in ti
+    ti = state_dict.get("ti") or {}
+    def looks_nuclear(name: str, meta: Dict[str, Any]) -> bool:
+        lname = name.lower()
+        tags = (meta.get("tags") or [])
+        cat  = str(meta.get("category", "")).lower()
+        # heuristic name matches
+        name_hit = any(k in lname for k in ("nuclear", "uranium", "centrifuge", "natanz", "fordow", "isfahan", "arak", "bushehr"))
+        tag_hit  = any(str(t).lower() in ("nuclear", "uranium", "centrifuge") for t in tags)
+        cat_hit  = cat in ("nuclear", "uranium")
+        list_hit = (name in nuclear_sites) if nuclear_sites else False
+        return name_hit or tag_hit or cat_hit or list_hit
+
+    nuc_targets = [(n, m) for n, m in ti.items() if looks_nuclear(n, m)]
+    total = len(nuc_targets)
+    destroyed = sum(1 for _, m in nuc_targets if m.get("destroyed", False))
+
+    # Without engine thresholds, don't claim victory—just report status
+    return {
+        "destroyed": destroyed,
+        "total": total,
+        "ready": False,       # advisory only (no hard claim)
+        "source": "heuristic" if not nuclear_sites else "rules_blob"
+    }
+        
+def _sum_plan_costs(steps: List["PlanStep"], uni: Dict[str, "EnumeratedAction"]) -> Dict[str, float]:
+    need = {"pp": 0.0, "ip": 0.0, "mp": 0.0}
+    for st in steps:
+        a = uni.get(st.action_id)
+        if not a:
+            continue
+        for k, v in (a.cost or {}).items():
+            if k in need:
+                need[k] += float(v)
+    return need
 
 # ---------- Models ----------
 class Squadron(BaseModel):
@@ -109,6 +217,8 @@ class EnumeratedAction(BaseModel):
     preconditions: List[str] = []
     cost: Dict[str, float] = {}
     tags: List[str] = []
+    timing: Dict[str, Any] = Field(default_factory=dict)  # <= new
+
 
 class PlanStep(BaseModel):
     action_id: str
@@ -181,19 +291,74 @@ def _derive_actions(state_dict: Dict[str, Any], side_to_move: str) -> List[Enume
         "iran": set(ctx["ready"]["iran"]),
     }
 
+    # Pull restrike/exec window hints from engine (best-effort)
+    plan_delay = 1
+    exec_window = 1
+    try:
+        if ge and hasattr(ge.GameEngine(), "restrike_rules"):
+            rr = ge.GameEngine().restrike_rules
+            plan_delay = int(rr.get("plan_delay_turns", plan_delay))
+            exec_window = int(rr.get("execute_window_turns", exec_window))
+    except Exception:
+        pass
+
     pruned: List[EnumeratedAction] = []
     for a in engine_out:
         atype = a.get("type", "")
-        # Filter based on state reality
-        if atype == "Order Airstrike":
-            if not ready["israel"]:
+
+        # ---------- SAM legality filters ----------
+        # Relocate SAM: only after overt Israeli attack
+        if atype in ("Relocate SAM", "RelocateSAM"):
+            if not ctx["flags"]["israel_overt_attack_done"]:
+                continue
+
+        # Pre-overt: block special long/med SAM engagement types if your engine emits them
+        # (examples: "SAM Engagement", "LongRangeSAM", "MediumRangeSAM")
+        if atype in ("SAM Engagement", "LongRangeSAM", "MediumRangeSAM"):
+            sysname = (a.get("system") or a.get("sam") or "").upper()
+            if not ctx["flags"]["israel_overt_attack_done"]:
+                if sysname in ("S-300", "HQ-9", "TOR", "S300", "HQ9"):
+                    continue
+
+        # Airstrike target sanity and Israeli day-only gate
+        if atype in ("Order Airstrike", "AirStrike"):
+            if not ctx["ready"]["israel"]:
                 continue
             tgt = a.get("target")
             if tgt not in alive:
                 continue
-        if atype == "Relocate SAM":
-            if not ctx["flags"]["israel_overt_attack_done"]:
-                continue
+
+        # ----- timing metadata (helps the model schedule correctly) -----
+        # Defaults per type
+        if atype in ("Plan Strike", "PLAN_STRIKE"):
+            timing = {
+                "earliest_phase": "next_morning",  # plans execute next eligible window
+                "duration_phases": 0,
+                "carry_over": True,
+                "window": {
+                    "start_turn": ctx["turn_number"] + plan_delay,
+                    "end_turn": ctx["turn_number"] + plan_delay + exec_window
+                }
+            }
+        elif atype in ("Order Airstrike", "AirStrike", "Recon"):
+            timing = {
+                "earliest_phase": ctx["phase"],     # can start now if legal
+                "duration_phases": 1,
+                "carry_over": False
+            }
+        elif atype in ("Relocate SAM", "RelocateSAM", "InterceptCAP"):
+            timing = {
+                "earliest_phase": ctx["phase"],
+                "duration_phases": 1,
+                "carry_over": False
+            }
+        else:
+            # Safe default for unknown engine verbs
+            timing = {
+                "earliest_phase": ctx["phase"],
+                "duration_phases": 1,
+                "carry_over": False
+            }
 
         ea = EnumeratedAction(
             action_id=str(uuid.uuid4()),
@@ -202,6 +367,7 @@ def _derive_actions(state_dict: Dict[str, Any], side_to_move: str) -> List[Enume
             preconditions=a.get("preconditions", []),
             cost=a.get("cost", {}),
             tags=a.get("tags", []),
+            timing=timing,
         )
         pruned.append(ea)
 
@@ -216,6 +382,11 @@ def _derive_actions(state_dict: Dict[str, Any], side_to_move: str) -> List[Enume
                     preconditions=["Day phase", "≥1 Ready squadron"],
                     cost={"mp": 1.0},
                     tags=["offense"],
+                    timing={
+                        "earliest_phase": ctx["phase"],
+                        "duration_phases": 1,
+                        "carry_over": False
+                    }
                 ))
             pruned.append(EnumeratedAction(
                 action_id=str(uuid.uuid4()),
@@ -224,6 +395,11 @@ def _derive_actions(state_dict: Dict[str, Any], side_to_move: str) -> List[Enume
                 preconditions=["Day phase", "Weather OK"],
                 cost={"mp": 0.5},
                 tags=["intel"],
+                timing={
+                    "earliest_phase": ctx["phase"],
+                    "duration_phases": 1,
+                    "carry_over": False
+                }
             ))
         if side == "iran" and ready["iran"] and ctx["phase"] in ("morning", "afternoon"):
             pruned.append(EnumeratedAction(
@@ -233,6 +409,11 @@ def _derive_actions(state_dict: Dict[str, Any], side_to_move: str) -> List[Enume
                 preconditions=["Day phase", "GCI available"],
                 cost={"mp": 0.7},
                 tags=["defense"],
+                timing={
+                    "earliest_phase": ctx["phase"],
+                    "duration_phases": 1,
+                    "carry_over": False
+                }
             ))
             if ctx["flags"]["israel_overt_attack_done"]:
                 pruned.append(EnumeratedAction(
@@ -242,6 +423,11 @@ def _derive_actions(state_dict: Dict[str, Any], side_to_move: str) -> List[Enume
                     preconditions=["Post-overt-attack only"],
                     cost={"ip": 1.0},
                     tags=["air-defense"],
+                    timing={
+                        "earliest_phase": ctx["phase"],
+                        "duration_phases": 1,
+                        "carry_over": False
+                    }
                 ))
     return pruned
 
@@ -282,7 +468,35 @@ def plan_validate(req: NoncedPlan):
     for i, st in enumerate(req.plan.steps):
         if st.action_id not in uni:
             illegal.append({"index": i, "action_id": st.action_id, "reason": "Not in legal action set"})
-    return {"ok": len(illegal) == 0, "illegal_steps": illegal}
+
+    # Resource feasibility check
+    # Side extraction from nonce suffix: ...-is or ...-ir
+    side_code = req.nonce.rsplit("-", 1)[-1]
+    side = "israel" if side_code == "is" else "iran"
+    try:
+        ctx = ctx_from_state(plan_state)
+    except HTTPException as e:
+        return {"ok": False, "illegal_steps": [{"index": 0, "reason": f"state invalid: {e.detail}"}]}
+
+    have = {k: float(ctx["resources"][side].get(k, 0)) for k in ("pp", "ip", "mp")}
+    need = _sum_plan_costs(req.plan.steps, uni)
+
+    over = []
+    for k in ("pp", "ip", "mp"):
+        if need[k] > have[k]:
+            over.append({"resource": k, "need": round(need[k], 3), "have": round(have[k], 3)})
+
+    ok = (len(illegal) == 0) and (len(over) == 0)
+    return {
+        "ok": ok,
+        "illegal_steps": illegal,
+        "resource_check": {
+            "side": side,
+            "need": {k: round(v, 3) for k, v in need.items()},
+            "have": {k: round(v, 3) for k, v in have.items()},
+            "deficits": over
+        }
+    }
 
 # ---------- Plan score (simple, deterministic) ----------
 @app.post("/plan/score")
@@ -306,11 +520,53 @@ def plan_score(req: NoncedPlan):
         elif a.kind == "InterceptCAP":
             intel += 0.2
             cost -= float(a.cost.get("mp", 0.5))
-        elif a.kind == "Relocate SAM":
+        elif a.kind in ("Relocate SAM", "RelocateSAM"):
             cost -= 0.25 * float(a.cost.get("ip", 1.0))
 
     total = round(dmg + intel + cost, 3)
-    return {"total": total, "breakdown": {"damage": round(dmg, 3), "intel": round(intel, 3), "resource_cost": round(cost, 3)}}
+
+    # --- advisories based on current state snapshot (not simulated effects)
+    plan_state = req.plan.state if isinstance(req.plan.state, dict) else None
+    oil_hint = _oil_victory_snapshot(plan_state) if plan_state else None
+    nuke_hint = _nuclear_victory_snapshot(plan_state) if plan_state else None
+
+    return {
+        "total": total,
+        "breakdown": {
+            "damage": round(dmg, 3),
+            "intel": round(intel, 3),
+            "resource_cost": round(cost, 3)
+        },
+        "advisory": {
+            "oil": oil_hint,
+            "nuclear": nuke_hint
+        }
+    }
+    
+@app.post("/advisory/victory")
+def advisory_victory(payload: Dict[str, Any]):
+    try:
+        ctx = ctx_from_state(payload)
+    except HTTPException as e:
+        raise e
+    oil = _oil_victory_snapshot(payload)
+    nuke = _nuclear_victory_snapshot(payload)
+    return {
+        "ok": True,
+        "turn": ctx["turn_number"],
+        "phase": ctx["phase"],
+        "oil": oil,
+        "nuclear": nuke
+    }
+@app.get("/")
+def root():
+    return {
+        "ok": True,
+        "service": "PI-API",
+        "version": "0.3.0",
+        "docs": "/docs",
+        "openapi": "/openapi.json"
+    }
 
 # ---------- Baseline suggest (optional A/B for the model) ----------
 @app.post("/plan/suggest")
@@ -331,3 +587,4 @@ def plan_suggest(req: EnumerateActionsRequest):
         "state": sdict,
     }
     return {"nonce": nonce, "plan": plan}
+
