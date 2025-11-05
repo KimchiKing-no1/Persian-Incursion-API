@@ -588,3 +588,18 @@ def plan_suggest(req: EnumerateActionsRequest):
     }
     return {"nonce": nonce, "plan": plan}
 
+@app.get("/privacy")
+def privacy():
+    return HTMLResponse("""
+    <h2>Privacy Policy</h2>
+    <p>This API processes only game state JSON for simulation. No personal data is collected or stored.</p>
+    """)
+
+@app.get("/terms")
+def terms():
+    return HTMLResponse("""
+    <h2>Terms of Use</h2>
+    <p>This API is for research and entertainment. Use at your own risk.</p>
+    """)
+
+
