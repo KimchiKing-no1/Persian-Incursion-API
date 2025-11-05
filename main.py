@@ -1,7 +1,7 @@
 import hashlib, json, uuid, importlib, copy
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -258,7 +258,9 @@ def state_validate(payload: GameState):
     return {"ok": True, "warnings": warn, "note": note}
 
 @app.post("/state/canonicalize")
-def state_canonicalize(payload: Dict[str, Any] = Body(..., example={"turn": {"turn_number": 5, "phase": "morning"}})):
+def state_canonicalize(
+    payload: Dict[str, Any] = Body(..., example={"turn": {"turn_number": 5, "phase": "morning"}})
+):
     ctx = ctx_from_state(payload)
     return {
         "ok": True,
@@ -268,6 +270,7 @@ def state_canonicalize(payload: Dict[str, Any] = Body(..., example={"turn": {"tu
         "ready_counts": {k: len(v) for k, v in ctx["ready"].items()},
         "targets_alive": len(ctx["alive_targets"]),
     }
+
 
 @app.post("/advisory/victory")
 def advisory_victory(payload: Dict[str, Any] = Body(..., example={"turn": {"turn_number": 5, "phase": "morning"}})):
@@ -600,6 +603,7 @@ def terms():
     <h2>Terms of Use</h2>
     <p>This API is for research and entertainment. Use at your own risk.</p>
     """)
+
 
 
 
