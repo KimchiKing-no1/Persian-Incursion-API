@@ -44,7 +44,51 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
+PHASE_MAP = {"m": "morning", "a": "afternoon", "n": "night",
+             "morning": "morning", "afternoon": "afternoon", "night": "night"}
+SIDE_MAP  = {"I": "israel", "i": "israel", "R": "iran", "r": "iran",
+             "israel": "israel", "iran": "iran"}
+
+def _normalize_turn_and_resources(state: Dict[str, Any]) -> Dict[str, Any]:
+    t = state.get("turn") or state.get("t")
+    if not isinstance(t, dict):
+        raise HTTPException(422, detail=(
+            'The optimal plan generation couldn’t complete because the uploaded game state '
+            'is missing the required "t/turn" object (turn number, side, time segment).\n\n'
+            'Example compact:\n"t": { "n": 1, "s": "I", "ts": "m" }\n'
+            'Example verbose:\n"turn": { "number": 1, "side": "Israel", "segment": "Morning" }'
+        ))
+
+    # accept n|turn_number|number
+    n  = t.get("turn_number", t.get("n", t.get("number")))
+    # accept s|side
+    sd = t.get("side", t.get("s"))
+    # accept ts|phase|segment
+    ph = t.get("phase", t.get("ts", t.get("segment")))
+
+    if n is None or sd is None or ph is None:
+        raise HTTPException(422, detail=(
+            'Turn object is incomplete. Required keys: number(n), side(s), segment(ts/phase).'
+        ))
+
+    side  = SIDE_MAP.get(str(sd), str(sd).lower())
+    phase = PHASE_MAP.get(str(ph).lower(), str(ph).lower())
+
+    resources = state.get("resources")
+    if not resources:
+        r = state.get("r")
+        if isinstance(r, dict) and all(k in r for k in ("mp", "ip", "pp")):
+            zero = {"mp": 0, "ip": 0, "pp": 0}
+            resources = {"israel": zero.copy(), "iran": zero.copy()}
+            resources[side] = {"mp": float(r["mp"]), "ip": float(r["ip"]), "pp": float(r["pp"])}
+        else:
+            raise HTTPException(422, detail='Missing resources (either "resources" or compact "r").')
+
+    return {"turn_number": int(n), "side": side, "phase": phase, "resources": resources}
+
+
 # ---------- Helpers ----------
+
 def _checksum(obj: Any) -> str:
     return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
@@ -57,32 +101,22 @@ def _day_phase(state_dict: Dict[str, Any]) -> bool:
     return str(ph).lower() in ("morning", "afternoon")
 
 def ctx_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
-    # 기존: turn = state.get("turn", {})
-    turn = state.get("turn") or {}                  # ← None이면 {}로
-    if not isinstance(turn, dict) or not turn:      # ← 타입/비어있음 체크
-        raise HTTPException(422, detail="Missing or invalid 'turn' object")
-
-    phase = str(turn.get("phase", "")).lower()
-    turn_number = turn.get("turn_number")
-    if not turn_number or phase not in ("morning", "afternoon", "night"):
-        raise HTTPException(422, detail="turn.turn_number or turn.phase missing/invalid")
-        
-    resources = state.get("resources")
-    if not resources or "israel" not in resources or "iran" not in resources:
-        raise HTTPException(422, detail="Missing resources.israel or resources.iran")
+    norm = _normalize_turn_and_resources(state)
+    turn_number, phase, resources = norm["turn_number"], norm["phase"], norm["resources"]
 
     air = state.get("as")
     if not air:
         raise HTTPException(422, detail="Missing air-side structure 'as'")
-    isr_ready = [s["id"] for s in air.get("israel_squadrons", []) if str(s.get("st", "")).lower() == "ready"]
-    irn_ready = [s["id"] for s in air.get("iran_squadrons", []) if str(s.get("st", "")).lower() == "ready"]
+
+    isr_ready = [s["id"] for s in air.get("israel_squadrons", []) if str(s.get("st","")).lower() == "ready"]
+    irn_ready = [s["id"] for s in air.get("iran_squadrons", [])   if str(s.get("st","")).lower() == "ready"]
 
     alive_targets = _alive_targets(state)
-    meta = state.get("meta") or {}
+    meta  = state.get("meta") or {}
     overt = bool(meta.get("israel_overt_attack_done", False))
 
     return {
-        "turn_number": int(turn_number),
+        "turn_number": turn_number,
         "phase": phase,
         "resources": resources,
         "ready": {"israel": isr_ready, "iran": irn_ready},
@@ -91,6 +125,7 @@ def ctx_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
         "checksum": _checksum(state)[:12],
         "raw": state,
     }
+
     
 def _oil_victory_snapshot(state_dict: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not ge:
@@ -199,6 +234,12 @@ def _sum_plan_costs(steps: List["PlanStep"], uni: Dict[str, "EnumeratedAction"])
             if k in need:
                 need[k] += float(v)
     return need
+
+def _side_code(side_str: str) -> str:
+    s = (side_str or "").strip().lower()
+    if s in ("israel", "i"): return "is"
+    if s in ("iran", "r"):   return "ir"
+    return s  # fallback
 
 # ---------- Models ----------
 class Squadron(BaseModel):
@@ -477,16 +518,19 @@ def actions_enumerate(req: EnumerateActionsRequest):
     actions = _derive_actions(sdict, req.side_to_move)
     actions = actions[: (req.max_actions or 60)]
 
+    code = _side_code(req.side_to_move)           
     cs = _checksum(sdict)[:12]
-    nonce = f"N-{cs}-{req.side_to_move[:2].lower()}"
+    nonce = f"N-{cs}-{code}"
     _UNIVERSES[nonce] = {a.action_id: a for a in actions}
 
     return {
         "nonce": nonce,
         "side_to_move": req.side_to_move,
-        "turn_phase": sdict.get("turn"),
+        "turn_phase": sdict.get("turn") or sdict.get("t"),
         "actions": [a.dict() for a in actions],
     }
+
+
 
 # ---------- Plan validate ----------
 @app.post("/plan/validate")
@@ -545,7 +589,13 @@ def plan_validate(req: NoncedPlan):
     # -------- Resource feasibility check --------
     # Side extraction from nonce suffix: ...-is or ...-ir
     side_code = req.nonce.rsplit("-", 1)[-1]
-    side = "israel" if side_code == "is" else "iran"
+    if side_code == "is":
+        side = "israel"
+    elif side_code == "ir":
+        side = "iran"
+    else:
+        raise HTTPException(422, f"Bad nonce side code: {side_code}")
+
 
     have = {k: float(ctx["resources"][side].get(k, 0)) for k in ("pp", "ip", "mp")}
     need = _sum_plan_costs(req.plan.steps, uni)
@@ -627,7 +677,10 @@ def root():
 def plan_suggest(req: EnumerateActionsRequest):
     sdict = req.state.dict(by_alias=True)
     actions = _derive_actions(sdict, req.side_to_move)
-    nonce = f"N-{_checksum(sdict)[:12]}-{req.side_to_move[:2].lower()}"
+
+    code = _side_code(req.side_to_move)         # ✅ use helper
+    cs = _checksum(sdict)[:12]
+    nonce = f"N-{cs}-{code}"
     _UNIVERSES[nonce] = {a.action_id: a for a in actions}
 
     picks = [a for a in actions if a.kind == "AirStrike"][:2]
@@ -642,6 +695,7 @@ def plan_suggest(req: EnumerateActionsRequest):
     }
     return {"nonce": nonce, "plan": plan}
 
+
 @app.get("/privacy")
 def privacy():
     return HTMLResponse("""
@@ -655,6 +709,8 @@ def terms():
     <h2>Terms of Use</h2>
     <p>This API is for research and entertainment. Use at your own risk.</p>
     """)
+
+
 
 @app.post("/plan/execute")
 def plan_execute(req: NoncedPlan):
@@ -681,7 +737,13 @@ def plan_execute(req: NoncedPlan):
 
     # 3) Resource feasibility (reuse your helper)
     side_code = req.nonce.rsplit("-", 1)[-1]
-    side = "israel" if side_code == "is" else "iran"
+    if side_code == "is":
+        side = "israel"
+    elif side_code == "ir":
+        side = "iran"
+    else:
+        raise HTTPException(422, f"Bad nonce side code: {side_code}")
+
     ctx = ctx_from_state(plan_state)  # will raise 422 if bad
     have = {k: float(ctx["resources"][side].get(k, 0)) for k in ("pp", "ip", "mp")}
     need = _sum_plan_costs(req.plan.steps, uni)
@@ -730,44 +792,30 @@ def plan_execute(req: NoncedPlan):
 
 @app.post("/turn/ai_move")
 def turn_ai_move(req: EnumerateActionsRequest):
-    """
-    Convenience: enumerate -> choose best -> execute -> return new state.
-    Keeps your strict binding and no invention of fields.
-    """
-    # 1) enumerate
     sdict = req.state.dict(by_alias=True)
     actions = _derive_actions(sdict, req.side_to_move)
     if not actions:
         raise HTTPException(422, "No legal actions for this side/phase")
 
-    # 2) simple best-of: pick top K by your /plan/score logic (greedy heuristic)
-    # Here we choose first 2 AirStrike + 1 Recon if present, else top 3
     picks = [a for a in actions if a.kind == "AirStrike"][:2]
     recon = next((a for a in actions if a.kind == "Recon"), None)
     if recon: picks.append(recon)
     if not picks:
         picks = actions[:min(3, len(actions))]
 
-    nonce = f"N-{_checksum(sdict)[:12]}-{req.side_to_move[:2].lower()}"
+    code = _side_code(req.side_to_move)           
+    cs = _checksum(sdict)[:12]
+    nonce = f"N-{cs}-{code}"
     _UNIVERSES[nonce] = {a.action_id: a for a in actions}
-    plan = {"objective": "AI best guess", "steps": [{"action_id": a.action_id} for a in picks], "state": sdict}
+
+    plan = {"objective": "AI best guess",
+            "steps": [{"action_id": a.action_id} for a in picks],
+            "state": sdict}
     plan_req = NoncedPlan(nonce=nonce, plan=Plan(**plan))
 
-    # 3) validate
     v = plan_validate(plan_req)
     if not v["ok"]:
         raise HTTPException(422, f"Plan invalid: {v}")
 
-    # 4) execute
     exec_out = plan_execute(plan_req)
-    return {
-        "nonce": nonce,
-        "chosen_steps": [s["action_id"] for s in plan["steps"]],
-        "result": exec_out
-    }
-
-
-
-
-
-
+    return {"nonce": nonce, "chosen_steps": [s["action_id"] for s in plan["steps"]], "result": exec_out}
