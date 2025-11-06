@@ -233,21 +233,20 @@ class EnumeratedAction(BaseModel):
     action_id: str
     kind: str
     description: str
-    preconditions: List[str] = []
-    cost: Dict[str, float] = {}
-    tags: List[str] = []
-    timing: Dict[str, Any] = Field(default_factory=dict)  # <= new
+    preconditions: List[str] = Field(default_factory=list)
+    cost: Dict[str, float] = Field(default_factory=dict)
+    tags: List[str] = Field(default_factory=list)
+    timing: Dict[str, Any] = Field(default_factory=dict)
+
+class Plan(BaseModel):
+    objective: Optional[str] = None
+    steps: List["PlanStep"] = Field(default_factory=list)
+    state: Dict[str, Any]
 
 
 class PlanStep(BaseModel):
     action_id: str
     rationale: Optional[str] = None
-
-class Plan(BaseModel):
-    objective: Optional[str] = None
-    steps: List[PlanStep] = []
-    # required: API must bind the plan to the exact state used for enumeration
-    state: Dict[str, Any]
 
 class NoncedPlan(BaseModel):
     nonce: str
@@ -501,29 +500,58 @@ def plan_validate(req: NoncedPlan):
     if not req.nonce.startswith(f"N-{cs}-"):
         return {"ok": False, "illegal_steps": [{"index": 0, "reason": "state/nonce mismatch"}]}
 
-    illegal = []
+    illegal: List[Dict[str, Any]] = []
     for i, st in enumerate(req.plan.steps):
         if st.action_id not in uni:
             illegal.append({"index": i, "action_id": st.action_id, "reason": "Not in legal action set"})
 
-    # Resource feasibility check
-    # Side extraction from nonce suffix: ...-is or ...-ir
-    side_code = req.nonce.rsplit("-", 1)[-1]
-    side = "israel" if side_code == "is" else "iran"
+    # Parse state context once (we'll use it for timing & resources)
     try:
         ctx = ctx_from_state(plan_state)
     except HTTPException as e:
-        return {"ok": False, "illegal_steps": [{"index": 0, "reason": f"state invalid: {e.detail}"}]}
+        return {"ok": False, "illegal_steps": illegal + [{"index": 0, "reason": f"state invalid: {e.detail}"}]}
+
+    # -------- Timing window enforcement --------
+    # Current turn number from the provided state
+    turn = ctx["turn_number"]
+    illegal_timing: List[Dict[str, Any]] = []
+
+    for i, st in enumerate(req.plan.steps):
+        a = uni.get(st.action_id)
+        if not a:
+            continue  # already captured as illegal above
+        # 'uni' holds EnumeratedAction objects; timing is a dict (possibly empty)
+        tmeta = getattr(a, "timing", None) or {}
+        win = tmeta.get("window")
+        if isinstance(win, dict):
+            start_turn = win.get("start_turn")
+            end_turn = win.get("end_turn")
+            # Enforce only when both bounds exist and are ints
+            if isinstance(start_turn, int) and isinstance(end_turn, int):
+                if not (start_turn <= turn <= end_turn):
+                    illegal_timing.append({
+                        "index": i,
+                        "action_id": st.action_id,
+                        "reason": f"timing window {win} not satisfied at turn {turn}"
+                    })
+
+    if illegal_timing:
+        return {"ok": False, "illegal_steps": illegal + illegal_timing}
+
+    # -------- Resource feasibility check --------
+    # Side extraction from nonce suffix: ...-is or ...-ir
+    side_code = req.nonce.rsplit("-", 1)[-1]
+    side = "israel" if side_code == "is" else "iran"
 
     have = {k: float(ctx["resources"][side].get(k, 0)) for k in ("pp", "ip", "mp")}
     need = _sum_plan_costs(req.plan.steps, uni)
 
-    over = []
+    deficits = []
     for k in ("pp", "ip", "mp"):
         if need[k] > have[k]:
-            over.append({"resource": k, "need": round(need[k], 3), "have": round(have[k], 3)})
+            deficits.append({"resource": k, "need": round(need[k], 3), "have": round(have[k], 3)})
 
-    ok = (len(illegal) == 0) and (len(over) == 0)
+    ok = (len(illegal) == 0) and (len(deficits) == 0)
     return {
         "ok": ok,
         "illegal_steps": illegal,
@@ -531,7 +559,7 @@ def plan_validate(req: NoncedPlan):
             "side": side,
             "need": {k: round(v, 3) for k, v in need.items()},
             "have": {k: round(v, 3) for k, v in have.items()},
-            "deficits": over
+            "deficits": deficits
         }
     }
 
@@ -624,6 +652,115 @@ def terms():
     <p>This API is for research and entertainment. Use at your own risk.</p>
     """)
 
+@app.post("/plan/execute")
+def plan_execute(req: NoncedPlan):
+    """
+    Apply a validated plan to the provided state and return the NEW state
+    in the SAME format the user provided (no invented fields).
+    """
+    uni = _UNIVERSES.get(req.nonce)
+    if not uni:
+        raise HTTPException(400, "Unknown/expired nonce. Re-enumerate.")
+
+    # 1) Bind to exact state via checksum-in-nonce (same as /plan/validate)
+    plan_state = req.plan.state if isinstance(req.plan.state, dict) else None
+    if not plan_state:
+        raise HTTPException(422, "plan.state missing")
+    cs = _checksum(plan_state)[:12]
+    if not req.nonce.startswith(f"N-{cs}-"):
+        raise HTTPException(422, "state/nonce mismatch")
+
+    # 2) Steps must be from legal set
+    illegal = [i for i, st in enumerate(req.plan.steps) if st.action_id not in uni]
+    if illegal:
+        raise HTTPException(422, f"Illegal steps at indexes: {illegal}")
+
+    # 3) Resource feasibility (reuse your helper)
+    side_code = req.nonce.rsplit("-", 1)[-1]
+    side = "israel" if side_code == "is" else "iran"
+    ctx = ctx_from_state(plan_state)  # will raise 422 if bad
+    have = {k: float(ctx["resources"][side].get(k, 0)) for k in ("pp", "ip", "mp")}
+    need = _sum_plan_costs(req.plan.steps, uni)
+    for k in ("pp","ip","mp"):
+        if need[k] > have[k]:
+            raise HTTPException(422, f"Insufficient {k}: need {need[k]}, have {have[k]}")
+
+    # 4) Apply with engine if available
+    s0 = copy.deepcopy(plan_state)
+    log: List[str] = []
+    if ge and hasattr(ge, "apply_actions"):
+        # Expect engine to accept a state and a list of abstract actions
+        # Convert action_ids back to the engine action dicts we stored
+        engine_actions = []
+        for st in req.plan.steps:
+            a = uni.get(st.action_id)
+            if not a:
+                continue
+            # minimal back-projection for engine; include 'type' and common fields
+            engine_actions.append({
+                "type": a.kind,
+                "target": (a.description.split("→",1)[-1].strip() if "→" in a.description else None),
+                "cost": a.cost,
+                "tags": a.tags,
+            })
+        try:
+            s1, engine_log = ge.apply_actions(s0, engine_actions, side=side)
+            if isinstance(engine_log, list):
+                log.extend([str(x) for x in engine_log])
+            new_state = s1
+        except Exception as e:
+            raise HTTPException(500, f"Engine apply_actions failed: {e}")
+    else:
+        # Strict fallback: if there is no engine, refuse to "invent" effects.
+        raise HTTPException(501, "Engine not available: cannot execute plan without changing state")
+
+    # 5) Return NEW state in the SAME format (no reformatting)
+    return {
+        "ok": True,
+        "applied_steps": [st.action_id for st in req.plan.steps],
+        "side": side,
+        "resource_spend": {k: round(need[k], 3) for k in need},
+        "log": log,
+        "state": new_state  # <-- feed this straight back into the human->MyGPT loop
+    }
+
+@app.post("/turn/ai_move")
+def turn_ai_move(req: EnumerateActionsRequest):
+    """
+    Convenience: enumerate -> choose best -> execute -> return new state.
+    Keeps your strict binding and no invention of fields.
+    """
+    # 1) enumerate
+    sdict = req.state.dict(by_alias=True)
+    actions = _derive_actions(sdict, req.side_to_move)
+    if not actions:
+        raise HTTPException(422, "No legal actions for this side/phase")
+
+    # 2) simple best-of: pick top K by your /plan/score logic (greedy heuristic)
+    # Here we choose first 2 AirStrike + 1 Recon if present, else top 3
+    picks = [a for a in actions if a.kind == "AirStrike"][:2]
+    recon = next((a for a in actions if a.kind == "Recon"), None)
+    if recon: picks.append(recon)
+    if not picks:
+        picks = actions[:min(3, len(actions))]
+
+    nonce = f"N-{_checksum(sdict)[:12]}-{req.side_to_move[:2].lower()}"
+    _UNIVERSES[nonce] = {a.action_id: a for a in actions}
+    plan = {"objective": "AI best guess", "steps": [{"action_id": a.action_id} for a in picks], "state": sdict}
+    plan_req = NoncedPlan(nonce=nonce, plan=Plan(**plan))
+
+    # 3) validate
+    v = plan_validate(plan_req)
+    if not v["ok"]:
+        raise HTTPException(422, f"Plan invalid: {v}")
+
+    # 4) execute
+    exec_out = plan_execute(plan_req)
+    return {
+        "nonce": nonce,
+        "chosen_steps": [s["action_id"] for s in plan["steps"]],
+        "result": exec_out
+    }
 
 
 
