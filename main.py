@@ -243,7 +243,7 @@ def _side_code(side_str: str) -> str:
 
 # ---------- Models ----------
 class AllowExtraModel(BaseModel):
-    """Base model that preserves unknown game-state fields."""
+    """Base model that preserves dynamic game-state fields flowing through the API."""
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
