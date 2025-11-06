@@ -1,5 +1,3 @@
-diff --git a/README.md b/README.md
-index 1c3d010dae0400ef3968cd234cf4eeca09f48bce..718d0a9e9a1bb16c634dcb142b03fe88d11bdc26 100644
 --- a/README.md
 +++ b/README.md
 @@ -1,3 +1,28 @@
