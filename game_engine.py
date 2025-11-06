@@ -562,10 +562,14 @@ class GameEngine:
                 state.setdefault('opinion', {}).setdefault('third_party', {})
                 state['opinion']['third_party']['un'] = state['opinion']['third_party'].get('un', 0) + pip_count
                 self._log(state, f"UN +{pip_count}")
-    # ======== BEGIN: add inside class GameEngine (helpers + systems) ==============
+
     def _ensure_player_structs(self, state, side):
-        ps = state.setdefault('players', {}).setdefault(side, {})
-        ps.setdefault('resources', {'pp':0, 'ip':0, 'mp':0})
+        players_dict = state.get('players')
+        if players_dict is None:
+            players_dict = {}
+            state['players'] = players_dict
+        ps = players_dict.setdefault(side, {})
+        ps.setdefault('resources', {'pp': 0, 'ip': 0, 'mp': 0})
         return ps
 
     def _morning_reset_resources(self, state):
