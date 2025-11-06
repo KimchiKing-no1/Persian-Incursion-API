@@ -1,6 +1,6 @@
 # game_engine.py
 import copy, random, re
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from mechanics import set_rules as mech_set_rules, opinion_roll
 from rules_global import RULES
@@ -1511,6 +1511,36 @@ class GameEngine:
         return "; ".join(diffs) if diffs else "no change"
 
     # ----------------------------- PUBLIC UTILITIES ----------------------------
+    def apply_actions(self, state: Dict[str, Any], actions: List[Dict[str, Any]], side: Optional[str] = None):
+        """Apply a sequence of actions, returning the new state and accumulated log."""
+        if not isinstance(state, dict):
+            raise ValueError("state must be a dict")
+        if not isinstance(actions, list):
+            raise ValueError("actions must be a list of dicts")
+
+        working = copy.deepcopy(state)
+        turn = working.setdefault("turn", {})
+        if side:
+            turn["current_player"] = side
+
+        working.setdefault("log", [])
+        start = len(working["log"])
+        for idx, action in enumerate(actions):
+            if not isinstance(action, dict):
+                continue
+            try:
+                updated = self.apply_action(working, action)
+            except Exception as exc:
+                raise ValueError(f"apply_actions[{idx}] failed for {action}: {exc}") from exc
+            if isinstance(updated, dict):
+                working = updated
+
+        new_entries = []
+        if isinstance(working.get("log"), list):
+            new_entries = [str(entry) for entry in working["log"][start:]]
+
+        return working, new_entries
+
     def apply_action(self, state, action):
         """
         Multi-action impulses:
