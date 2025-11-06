@@ -25,7 +25,7 @@ class OpsLoggingMixin:
         "special_warfare_max": {"IP": 4, "MP": 3},
         "terror_min": {"IP": 1, "MP": 1},          # IRN
         "terror_max": {"IP": 4, "MP": 3},
-        "bm_per_battalion": {"IP": 1, "MP": 1},    # IRN (1 IP + 1 MP per battalion) – tune if your rules differ
+        "bm_per_battalion": {"IP": 0, "MP": 1},    # IRN (1 IP + 1 MP per battalion) – tune if your rules differ
         # Strait: MP 1..7 (+ optional IP up to 2). We’ll pass the chosen values in action.
         "strait_ip_cap": 2,
         "strait_mp_min": 1,
@@ -170,4 +170,5 @@ class OpsLoggingMixin:
             self._log(state, f"[COUNTER] israel spends PP={israel_pp_counter} to counter strait attempt")
             self._spend(state, "israel", {"PP": israel_pp_counter})
         result = self._resolve_close_strait(state, side, mp_spent, ip_spent, israel_pp_counter)
+
         self._log(state, f"[RESULT] Strait: {result}")
