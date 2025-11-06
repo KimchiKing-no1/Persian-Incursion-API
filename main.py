@@ -672,13 +672,14 @@ def root():
         "openapi": "/openapi.json"
     }
 
-# ---------- Baseline suggest (optional A/B for the model) ----------
+# main.py
 @app.post("/plan/suggest")
 def plan_suggest(req: EnumerateActionsRequest):
+    if not req.state:
+        raise HTTPException(status_code=422, detail="Missing 'state' object in request body.")
     sdict = req.state.dict(by_alias=True)
     actions = _derive_actions(sdict, req.side_to_move)
-
-    code = _side_code(req.side_to_move)         # ✅ use helper
+    code = _side_code(req.side_to_move)      
     cs = _checksum(sdict)[:12]
     nonce = f"N-{cs}-{code}"
     _UNIVERSES[nonce] = {a.action_id: a for a in actions}
@@ -819,4 +820,5 @@ def turn_ai_move(req: EnumerateActionsRequest):
 
     exec_out = plan_execute(plan_req)
     return {"nonce": nonce, "chosen_steps": [s["action_id"] for s in plan["steps"]], "result": exec_out}
+
 
