@@ -1,6 +1,3 @@
---- a/README.md
-+++ b/README.md
-@@ -1,3 +1,28 @@
  # Persian-Incursion-API
  
 -connecting mygpt with api
