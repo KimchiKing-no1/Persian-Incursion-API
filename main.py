@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import JSONResponse, HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from fastapi.openapi.utils import get_openapi
 
 # ---------- Errors ----------
@@ -242,6 +242,9 @@ def _side_code(side_str: str) -> str:
     return s  # fallback
 
 # ---------- Models ----------
+class AllowExtraModel(AllowExtraModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    
 class Squadron(BaseModel):
     id: str
     ty: str
@@ -250,11 +253,11 @@ class Squadron(BaseModel):
     b: Optional[str] = None
     mission_status: Optional[str] = None
 
-class AirSide(BaseModel):
+class AirSide(AllowExtraModel):
     israel_squadrons: List[Squadron] = Field(default_factory=list)
     iran_squadrons: List[Squadron] = Field(default_factory=list)
 
-class GameState(BaseModel):
+class GameState(AllowExtraModel):
     t: Optional[dict] = None
     r: Optional[dict] = None
     o: Optional[dict] = None
@@ -269,12 +272,12 @@ class GameState(BaseModel):
     turn: Optional[dict] = None
     resources: Optional[dict] = None  # ensure present for ctx checks
 
-class EnumerateActionsRequest(BaseModel):
+class EnumerateActionsRequest(AllowExtraModel):
     state: GameState
     side_to_move: Optional[str] = "Israel"
     max_actions: Optional[int] = 60
 
-class EnumeratedAction(BaseModel):
+class EnumeratedAction(AllowExtraModel):
     action_id: str
     kind: str
     description: str
@@ -282,18 +285,19 @@ class EnumeratedAction(BaseModel):
     cost: Dict[str, float] = Field(default_factory=dict)
     tags: List[str] = Field(default_factory=list)
     timing: Dict[str, Any] = Field(default_factory=dict)
+    engine_payload: Optional[Dict[str, Any]] = Field(default=None, exclude=True)
 
-class Plan(BaseModel):
+class Plan(AllowExtraModel):
     objective: Optional[str] = None
     steps: List["PlanStep"] = Field(default_factory=list)
     state: Dict[str, Any]
 
 
-class PlanStep(BaseModel):
+class PlanStep(AllowExtraModel):
     action_id: str
     rationale: Optional[str] = None
 
-class NoncedPlan(BaseModel):
+class NoncedPlan(AllowExtraModel):
     nonce: str
     plan: Plan
 
@@ -315,14 +319,14 @@ def state_validate(payload: GameState):
         warn.append("No target intelligence (ti) found")
     note = None
     if ge and hasattr(ge, "apply_morning_opinion_income"):
-        s = payload.dict(by_alias=True)
+        s = payload.model_dump(by_alias=True)
         ge.apply_morning_opinion_income(s, carry_cap=None, log_fn=None)
         note = "Opinion income computed (not persisted)"
     return {"ok": True, "warnings": warn, "note": note}
 
 @app.post("/state/canonicalize")
 def state_canonicalize(payload: GameState):
-    sdict = payload.dict(by_alias=True)
+    sdict = payload.model_dump(by_alias=True)
     ctx = ctx_from_state(sdict)
     return {
         "ok": True,
@@ -336,7 +340,7 @@ def state_canonicalize(payload: GameState):
 
 @app.post("/advisory/victory")
 def advisory_victory(payload: GameState):
-    sdict = payload.dict(by_alias=True)
+    sdict = payload.model_dump(by_alias=True)
     ctx = ctx_from_state(sdict)
     oil = _oil_victory_snapshot(sdict)
     nuke = _nuclear_victory_snapshot(sdict)
@@ -449,6 +453,7 @@ def _derive_actions(state_dict: Dict[str, Any], side_to_move: str) -> List[Enume
             cost=a.get("cost", {}),
             tags=a.get("tags", []),
             timing=timing,
+            engine_payload=copy.deepcopy(a),
         )
         pruned.append(ea)
 
@@ -514,7 +519,7 @@ def _derive_actions(state_dict: Dict[str, Any], side_to_move: str) -> List[Enume
 
 @app.post("/actions/enumerate")
 def actions_enumerate(req: EnumerateActionsRequest):
-    sdict = req.state.dict(by_alias=True)
+    sdict = req.state.model_dump(by_alias=True)
     actions = _derive_actions(sdict, req.side_to_move)
     actions = actions[: (req.max_actions or 60)]
 
@@ -527,7 +532,7 @@ def actions_enumerate(req: EnumerateActionsRequest):
         "nonce": nonce,
         "side_to_move": req.side_to_move,
         "turn_phase": sdict.get("turn") or sdict.get("t"),
-        "actions": [a.dict() for a in actions],
+        "actions": [a.model_dump() for a in actions],
     }
 
 
@@ -677,7 +682,7 @@ def root():
 def plan_suggest(req: EnumerateActionsRequest):
     if not req.state:
         raise HTTPException(status_code=422, detail="Missing 'state' object in request body.")
-    sdict = req.state.dict(by_alias=True)
+    sdict = req.state.model_dump(by_alias=True)
     actions = _derive_actions(sdict, req.side_to_move)
     code = _side_code(req.side_to_move)      
     cs = _checksum(sdict)[:12]
@@ -763,13 +768,40 @@ def plan_execute(req: NoncedPlan):
             a = uni.get(st.action_id)
             if not a:
                 continue
-            # minimal back-projection for engine; include 'type' and common fields
-            engine_actions.append({
-                "type": a.kind,
-                "target": (a.description.split("→",1)[-1].strip() if "→" in a.description else None),
-                "cost": a.cost,
-                "tags": a.tags,
-            })
+            payload = copy.deepcopy(getattr(a, "engine_payload", None) or {})
+            payload.setdefault("type", a.kind)
+
+            # Fill target hint if engine payload omitted it
+            if payload.get("target") is None:
+                if "→" in a.description:
+                    payload["target"] = a.description.split("→", 1)[-1].strip()
+
+            cost_map = {}
+            for ck, cv in (a.cost or {}).items():
+                if cv is None:
+                    continue
+                try:
+                    cost_map[str(ck).lower()] = float(cv)
+                except (TypeError, ValueError):
+                    continue
+
+            t = payload.get("type", "")
+            if t in ("Order Special Warfare", "Order Terror Attack"):
+                if "mp_cost" not in payload and "mp" in cost_map:
+                    payload["mp_cost"] = int(round(cost_map["mp"]))
+                if "ip_cost" not in payload and "ip" in cost_map:
+                    payload["ip_cost"] = int(round(cost_map["ip"]))
+            if t == "Order Ballistic Missile":
+                payload.setdefault("battalions", 1)
+                payload.setdefault("missile_type", "Shahab")
+            if t == "Order Airstrike":
+                payload.setdefault("corridor", "central")
+                if not payload.get("squadrons"):
+                    ready_isr = ctx["ready"].get("israel", [])
+                    payload["squadrons"] = [{"id": sq} for sq in ready_isr[:2]]
+                payload.setdefault("loadout", {})
+
+            engine_actions.append(payload)
         try:
             s1, engine_log = ge.apply_actions(s0, engine_actions, side=side)
             if isinstance(engine_log, list):
@@ -793,7 +825,7 @@ def plan_execute(req: NoncedPlan):
 
 @app.post("/turn/ai_move")
 def turn_ai_move(req: EnumerateActionsRequest):
-    sdict = req.state.dict(by_alias=True)
+    sdict = req.state.model_dump(by_alias=True)
     actions = _derive_actions(sdict, req.side_to_move)
     if not actions:
         raise HTTPException(422, "No legal actions for this side/phase")
@@ -820,6 +852,7 @@ def turn_ai_move(req: EnumerateActionsRequest):
 
     exec_out = plan_execute(plan_req)
     return {"nonce": nonce, "chosen_steps": [s["action_id"] for s in plan["steps"]], "result": exec_out}
+
 
 
 
