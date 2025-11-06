@@ -27,4 +27,6 @@
 +```
 +
 +The command must complete without errors before deploying or regenerating the API client.
-
+ 
+EOF
+)
