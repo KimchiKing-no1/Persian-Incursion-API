@@ -104,7 +104,7 @@ def ctx_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
     norm = _normalize_turn_and_resources(state)
     turn_number, phase, resources = norm["turn_number"], norm["phase"], norm["resources"]
 
-    air = state.get("as")
+    air = state.get("as") or state.get("air")
     if not air:
         raise HTTPException(422, detail="Missing air-side structure 'as'")
 
@@ -819,3 +819,4 @@ def turn_ai_move(req: EnumerateActionsRequest):
 
     exec_out = plan_execute(plan_req)
     return {"nonce": nonce, "chosen_steps": [s["action_id"] for s in plan["steps"]], "result": exec_out}
+
