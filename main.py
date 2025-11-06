@@ -57,12 +57,16 @@ def _day_phase(state_dict: Dict[str, Any]) -> bool:
     return str(ph).lower() in ("morning", "afternoon")
 
 def ctx_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
-    turn = state.get("turn", {})
-    turn_number = turn.get("turn_number")
+    # 기존: turn = state.get("turn", {})
+    turn = state.get("turn") or {}                  # ← None이면 {}로
+    if not isinstance(turn, dict) or not turn:      # ← 타입/비어있음 체크
+        raise HTTPException(422, detail="Missing or invalid 'turn' object")
+
     phase = str(turn.get("phase", "")).lower()
+    turn_number = turn.get("turn_number")
     if not turn_number or phase not in ("morning", "afternoon", "night"):
         raise HTTPException(422, detail="turn.turn_number or turn.phase missing/invalid")
-
+        
     resources = state.get("resources")
     if not resources or "israel" not in resources or "iran" not in resources:
         raise HTTPException(422, detail="Missing resources.israel or resources.iran")
@@ -761,6 +765,7 @@ def turn_ai_move(req: EnumerateActionsRequest):
         "chosen_steps": [s["action_id"] for s in plan["steps"]],
         "result": exec_out
     }
+
 
 
 
