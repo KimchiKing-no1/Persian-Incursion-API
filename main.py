@@ -323,6 +323,92 @@ class NoncedPlan(AllowExtraModel):
     nonce: str
     plan: Plan
 
+class HumanMoveRequest(BaseModel):
+    game_id: str
+    side: str              # "israel" or "iran"
+    state: Dict[str, Any]
+    action: Dict[str, Any]
+
+class AIMoveRequest(BaseModel):
+    game_id: str
+    side: str          # AI가 담당하는 side
+    state: Dict[str, Any]
+
+
+@app.post("/human_move")
+def human_move(req: HumanMoveRequest):
+    if not ge:
+        raise HTTPException(500, "Engine not available.")
+    eng = ge.GameEngine()
+
+    next_state, reward, done, info = eng.rl_step(
+        copy.deepcopy(req.state),
+        req.action,
+        side=req.side,
+    )
+
+    log_transition(
+        req.game_id,
+        req.state,
+        req.side,
+        req.action,
+        reward,
+        done,
+        info,
+        policy=None,
+    )
+
+    return {
+        "new_state": next_state,
+        "reward": reward,
+        "done": done,
+        "info": info,
+    }
+@app.post("/ai_move")
+def ai_move(req: AIMoveRequest):
+    if not ge:
+        raise HTTPException(500, "Engine not available.")
+
+    import mcts as mcts_mod
+
+    eng = ge.GameEngine()
+    agent = mcts_mod.MCTSAgent(
+        engine=eng,
+        side=req.side,
+        simulations=400,      # 상황 보면서 조절
+        verbose=False,
+    )
+
+    # MCTS로 best_action + policy 얻기
+    best_action, policy = agent.choose_action(copy.deepcopy(req.state))
+
+    # 엔진에 실제로 적용
+    next_state, reward, done, info = eng.rl_step(
+        copy.deepcopy(req.state),
+        best_action,
+        side=req.side,
+    )
+
+    # RL 학습용 로그
+    log_transition(
+        req.game_id,
+        req.state,
+        req.side,
+        best_action,
+        reward,
+        done,
+        info,
+        policy=policy,
+    )
+
+    return {
+        "action": best_action,
+        "new_state": next_state,
+        "reward": reward,
+        "done": done,
+        "info": info,
+    }
+
 # ---------- Universes (nonce → action_id → EnumeratedAction) ----------
 _UNIVERSES: Dict[str, Dict[str, EnumeratedAction]] = {}
 
@@ -907,6 +993,7 @@ def turn_ai_move(req: EnumerateActionsRequest):
 
     exec_out = plan_execute(plan_req)
     return {"nonce": nonce, "chosen_steps": [s["action_id"] for s in plan["steps"]], "result": exec_out}
+
 
 
 
