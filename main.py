@@ -98,13 +98,51 @@ def _normalize_turn_and_resources(state: Dict[str, Any]) -> Dict[str, Any]:
 
     resources = state.get("resources")
     if not resources:
+        # 1-1) compact "r": { "mp":..,"ip":..,"pp":.. }
         r = state.get("r")
         if isinstance(r, dict) and all(k in r for k in ("mp", "ip", "pp")):
             zero = {"mp": 0, "ip": 0, "pp": 0}
             resources = {"israel": zero.copy(), "iran": zero.copy()}
-            resources[side] = {"mp": float(r["mp"]), "ip": float(r["ip"]), "pp": float(r["pp"])}
+            resources[side] = {
+                "mp": float(r["mp"]),
+                "ip": float(r["ip"]),
+                "pp": float(r["pp"]),
+            }
         else:
-            raise HTTPException(422, detail='Missing resources (either "resources" or compact "r").')
+           
+            players = state.get("players")
+            if isinstance(players, dict) and any(s in players for s in ("israel", "iran")):
+                zero = {"mp": 0, "ip": 0, "pp": 0}
+                resources = {"israel": zero.copy(), "iran": zero.copy()}
+                for s in ("israel", "iran"):
+                    pres = (players.get(s) or {}).get("resources") or {}
+                    resources[s] = {
+                        "mp": float(pres.get("mp", 0)),
+                        "ip": float(pres.get("ip", 0)),
+                        "pp": float(pres.get("pp", 0)),
+                    }
+            else:
+                raise HTTPException(
+                    422,
+                    detail='Missing resources (either "resources", compact "r", or players[side].resources).',
+                )
+
+    else:
+        if side not in resources or not isinstance(resources.get(side), dict):
+            if isinstance(resources, dict) and all(k in resources for k in ("mp", "ip", "pp")):
+                zero = {"mp": 0, "ip": 0, "pp": 0}
+                wrapped = {"israel": zero.copy(), "iran": zero.copy()}
+                wrapped[side] = {
+                    "mp": float(resources["mp"]),
+                    "ip": float(resources["ip"]),
+                    "pp": float(resources["pp"]),
+                }
+                resources = wrapped
+            else:
+                raise HTTPException(
+                    422,
+                    detail='Bad "resources" shape: expected per-side mapping or flat {mp,ip,pp}.',
+                )
 
     return {"turn_number": int(n), "side": side, "phase": phase, "resources": resources}
 
@@ -993,6 +1031,7 @@ def turn_ai_move(req: EnumerateActionsRequest):
 
     exec_out = plan_execute(plan_req)
     return {"nonce": nonce, "chosen_steps": [s["action_id"] for s in plan["steps"]], "result": exec_out}
+
 
 
 
