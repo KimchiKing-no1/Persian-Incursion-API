@@ -120,7 +120,7 @@ class MCTSAgent:
         if not root.unexpanded_actions and not root.children:
             # no legal moves -> Pass if it's our turn; otherwise do nothing
             if state.get("turn", {}).get("current_player", "").lower() == self.side:
-                return {"type": "Pass"}
+                return {"type": "Pass"}, {json.dumps({"type":"Pass"}): 1.0}
             return {}
 
         # Root exploration noise
