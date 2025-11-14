@@ -517,6 +517,39 @@ def _derive_actions(state_dict: Dict[str, Any], side_to_move: str) -> List[Enume
                 ))
     return pruned
 
+class RLSimpleRequest(BaseModel):
+    state: Dict[str, Any]
+    side: str
+
+@app.post("/rl/legal_actions")
+def rl_legal_actions(req: RLSimpleRequest):
+    if not ge:
+        raise HTTPException(500, "Engine not available.")
+    eng = ge.GameEngine()
+    acts = eng.get_legal_actions(copy.deepcopy(req.state), side=req.side)
+    return {"actions": acts}
+class RLStepRequest(BaseModel):
+    state: Dict[str, Any]
+    side: str
+    action: Dict[str, Any]
+
+@app.post("/rl/step")
+def rl_step(req: RLStepRequest):
+    if not ge:
+        raise HTTPException(500, "Engine not available.")
+    eng = ge.GameEngine()
+    next_state, reward, done, info = eng.rl_step(
+        copy.deepcopy(req.state),
+        req.action,
+        side=req.side,
+    )
+    return {
+        "next_state": next_state,
+        "reward": reward,
+        "done": done,
+        "info": info,
+    }
+
 @app.post("/actions/enumerate")
 def actions_enumerate(req: EnumerateActionsRequest):
     sdict = req.state.model_dump(by_alias=True)
@@ -852,6 +885,7 @@ def turn_ai_move(req: EnumerateActionsRequest):
 
     exec_out = plan_execute(plan_req)
     return {"nonce": nonce, "chosen_steps": [s["action_id"] for s in plan["steps"]], "result": exec_out}
+
 
 
 
