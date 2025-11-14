@@ -1741,6 +1741,65 @@ class GameEngine:
         # IMPORTANT: do NOT advance the turn; keep the impulse alive for multi-actions
         return state
     
+    # ----------------------------- RL HELPERS --------------------------------
+    def rl_step(
+        self,
+        state: Dict[str, Any],
+        action: Dict[str, Any],
+        side: Optional[str] = None,
+    ):
+        """
+        One RL-style environment step.
+
+        Returns: (next_state, reward, done, info)
+
+        - side: the learning side ('israel' or 'iran'); if None, use current_player.
+        """
+        if side is None:
+            side = state.get("turn", {}).get("current_player", "israel").lower()
+
+        before = copy.deepcopy(state)
+        next_state = self.apply_action(before, action)
+
+        winner = self.is_game_over(next_state)
+        done = winner is not None
+        reward = self._rl_reward(before, next_state, winner, side)
+
+        info = {
+            "winner": winner,
+        }
+        return next_state, reward, done, info
+    def _rl_reward(
+        self,
+        before: Dict[str, Any],
+        after: Dict[str, Any],
+        winner: Optional[str],
+        side: str,
+    ) -> float:
+        """
+        Very simple shaped reward:
+        - +1 / -1 for terminal win/loss.
+        - Small shaping from domestic opinion and resources.
+        """
+        side = side.lower()
+
+        if winner is not None:
+            return 1.0 if winner == side else -1.0
+
+        def dom(st, s):
+            return st.get("opinion", {}).get("domestic", {}).get(s, 0)
+
+        def res_sum(st, s):
+            r = ((st.get("players", {}) or {})
+                    .get(s, {})
+                    .get("resources", {}))
+            return float(r.get("pp", 0) + r.get("ip", 0) + r.get("mp", 0))
+
+        d_dom = dom(after, side) - dom(before, side)
+        d_res = res_sum(after, side) - res_sum(before, side)
+
+        # small weights so games don't blow up
+        return 0.1 * d_dom + 0.01 * d_res
 
     # ----------------------------- VICTORY CONDITIONS ---------------------------
     def _domestic(self, state, side):
