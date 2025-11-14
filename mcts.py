@@ -97,12 +97,19 @@ class MCTSAgent:
     # ----------------------------------------------------------------------
     # P U B L I C   A P I
     # ----------------------------------------------------------------------
-    def choose_action(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    def choose_action(self, state: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, float]]:
         """
-        Builds a search tree from `state` and returns the action with highest visit count.
+        Builds a search tree from `state` and returns:
+          (best_action_dict, policy_dict)
+
+        best_action_dict: the action with highest visit count.
+        policy_dict: {action_json: visit_prob} over all root children.
         """
-        acts = self.engine.get_legal_actions(state, self.side)
-        print(f"[legal/{self.side}] {len(acts)} -> {[a.get('type') for a in acts][:10]}")
+        
+        acts = self._legal_actions(state)
+        if self.verbose:
+            print(f"[legal/{self.side}] {len(acts)} -> {[a.get('type') for a in acts][:10]}")
+
 
         self._transpo.clear()
 
