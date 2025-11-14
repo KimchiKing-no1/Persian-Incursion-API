@@ -5,6 +5,28 @@ from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel, Field, ConfigDict
 from fastapi.openapi.utils import get_openapi
+EPISODES: Dict[str, List[dict]] = {}
+
+
+def log_transition(game_id: str,
+                   state: dict,
+                   side: str,
+                   action: dict,
+                   reward: float,
+                   done: bool,
+                   info: dict,
+                   policy: dict | None = None):
+    if game_id not in EPISODES:
+        EPISODES[game_id] = []
+    EPISODES[game_id].append({
+        "state": state,
+        "side": side,
+        "action": action,
+        "reward": reward,
+        "done": done,
+        "info": info,
+        "policy": policy or {}
+    })
 
 # ---------- Errors ----------
 class StateError(HTTPException):
@@ -885,6 +907,7 @@ def turn_ai_move(req: EnumerateActionsRequest):
 
     exec_out = plan_execute(plan_req)
     return {"nonce": nonce, "chosen_steps": [s["action_id"] for s in plan["steps"]], "result": exec_out}
+
 
 
 
