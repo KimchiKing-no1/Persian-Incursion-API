@@ -1510,7 +1510,7 @@ class GameEngine:
                 diffs.append(f"{key}: {b.get(key)} → {a.get(key)}")
         return "; ".join(diffs) if diffs else "no change"
    
-   def apply_actions(self, state: Dict[str, Any], actions: List[Dict[str, Any]], side: Optional[str] = None):
+    def apply_actions(self, state: Dict[str, Any], actions: List[Dict[str, Any]], side: Optional[str] = None):
         """Apply a sequence of actions, returning the new state and accumulated log."""
         if not isinstance(state, dict):
             raise ValueError("state must be a dict")
