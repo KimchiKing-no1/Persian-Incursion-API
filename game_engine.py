@@ -610,7 +610,35 @@ class GameEngine:
             buf['mp'] += max(0, int(delta_mp))
 
 
+    def apply_actions(self, state: Dict[str, Any], actions: List[Dict[str, Any]], side: Optional[str] = None):
+        """Apply a sequence of actions, returning the new state and accumulated log."""
+        if not isinstance(state, dict):
+            raise ValueError("state must be a dict")
+        if not isinstance(actions, list):
+            raise ValueError("actions must be a list of dicts")
 
+        working = copy.deepcopy(state)
+        turn = working.setdefault("turn", {})
+        if side:
+            turn["current_player"] = side
+
+        working.setdefault("log", [])
+        start = len(working["log"])
+        for idx, action in enumerate(actions):
+            if not isinstance(action, dict):
+                continue
+            try:
+                updated = self.apply_action(working, action)
+            except Exception as exc:
+                raise ValueError(f"apply_actions[{idx}] failed for {action}: {exc}") from exc
+            if isinstance(updated, dict):
+                working = updated
+
+        new_entries = []
+        if isinstance(working.get("log"), list):
+            new_entries = [str(entry) for entry in working["log"][start:]]
+
+        return working, new_entries
     # ---------- Strategic Events (Morning) ----------------------------------------
     
     def _roll_strategic_event_morning(self, state):
@@ -1510,35 +1538,7 @@ class GameEngine:
                 diffs.append(f"{key}: {b.get(key)} → {a.get(key)}")
         return "; ".join(diffs) if diffs else "no change"
    
-    def apply_actions(self, state: Dict[str, Any], actions: List[Dict[str, Any]], side: Optional[str] = None):
-        """Apply a sequence of actions, returning the new state and accumulated log."""
-        if not isinstance(state, dict):
-            raise ValueError("state must be a dict")
-        if not isinstance(actions, list):
-            raise ValueError("actions must be a list of dicts")
-
-        working = copy.deepcopy(state)
-        turn = working.setdefault("turn", {})
-        if side:
-            turn["current_player"] = side
-
-        working.setdefault("log", [])
-        start = len(working["log"])
-        for idx, action in enumerate(actions):
-            if not isinstance(action, dict):
-                continue
-            try:
-                updated = self.apply_action(working, action)
-            except Exception as exc:
-                raise ValueError(f"apply_actions[{idx}] failed for {action}: {exc}") from exc
-            if isinstance(updated, dict):
-                working = updated
-
-        new_entries = []
-        if isinstance(working.get("log"), list):
-            new_entries = [str(entry) for entry in working["log"][start:]]
-
-        return working, new_entries
+    
      # ----------------------------- PUBLIC UTILITIES ----------------------------
     def apply_action(self, state, action):
         """
