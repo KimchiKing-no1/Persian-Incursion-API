@@ -264,7 +264,7 @@ def _side_code(side_str: str) -> str:
     return s  # fallback
 
 # ---------- Models ----------
-class AllowExtraModel(AllowExtraModel):
+class AllowExtraModel(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
     
 class Squadron(BaseModel):
@@ -993,6 +993,7 @@ def turn_ai_move(req: EnumerateActionsRequest):
 
     exec_out = plan_execute(plan_req)
     return {"nonce": nonce, "chosen_steps": [s["action_id"] for s in plan["steps"]], "result": exec_out}
+
 
 
 
