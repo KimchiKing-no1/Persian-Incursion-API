@@ -164,10 +164,7 @@ class MCTSAgent:
                 best_q = max((c.Q for c in root.children), default=0.0)
                 best_n = max((c.N for c in root.children), default=0)
                 print(f"[MCTS] sims={sims_done} bestN={best_n} bestQ={best_q:.3f} children={len(root.children)}")
-
-       # mcts_agent.py (AFTER)
-
-            # If no expansions happened, return the first legal move with a 100% policy
+             # If no expansions happened, return the first legal move with a 100% policy
             if not root.children:
                 action = root.unexpanded_actions[0] if root.unexpanded_actions else {"type": "Pass"}
                 policy = {json.dumps(action, sort_keys=True): 1.0}
@@ -192,6 +189,8 @@ class MCTSAgent:
             # Return both the chosen action and the full policy
             return best_action, policy
 
+
+           
     # ----------------------------------------------------------------------
     # M C T S   C O R E
     # ----------------------------------------------------------------------
