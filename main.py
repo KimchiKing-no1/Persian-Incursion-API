@@ -114,80 +114,103 @@ PHASE_MAP = {"m": "morning", "a": "afternoon", "n": "night",
 SIDE_MAP  = {"I": "israel", "i": "israel", "R": "iran", "r": "iran",
              "israel": "israel", "iran": "iran"}
 
+from typing import Any, Dict  # 이미 있을 거지만, Any가 꼭 있어야 함
+
+_SIDE_NORMALIZE = {
+    "I": "israel", "i": "israel", "Israel": "israel",
+    "R": "iran",   "r": "iran",   "Iran": "iran",
+    "israel": "israel", "iran": "iran",
+}
+
 def _normalize_turn_and_resources(state: Dict[str, Any]) -> Dict[str, Any]:
-    t = state.get("turn") or state.get("t")
-    if not isinstance(t, dict):
-        raise HTTPException(422, detail=(
-            'The optimal plan generation couldn’t complete because the uploaded game state '
-            'is missing the required "t/turn" object (turn number, side, time segment).\n\n'
-            'Example compact:\n"t": { "n": 1, "s": "I", "ts": "m" }\n'
-            'Example verbose:\n"turn": { "number": 1, "side": "Israel", "segment": "Morning" }'
-        ))
+    """
+    - t / turn 이 dict 이든, 그냥 숫자(int) 이든 모두 받아서
+      내부적으로 통일된 형태로 변환.
+    """
+    raw_t = state.get("turn", None)
+    if raw_t is None:
+        raw_t = state.get("t", None)
 
-    # accept n|turn_number|number
-    n  = t.get("turn_number", t.get("n", t.get("number")))
-    # accept s|side
-    sd = t.get("side", t.get("s"))
-    # accept ts|phase|segment
-    ph = t.get("phase", t.get("ts", t.get("segment")))
-
-    if n is None or sd is None or ph is None:
-        raise HTTPException(422, detail=(
-            'Turn object is incomplete. Required keys: number(n), side(s), segment(ts/phase).'
-        ))
-
-    side  = SIDE_MAP.get(str(sd), str(sd).lower())
-    phase = PHASE_MAP.get(str(ph).lower(), str(ph).lower())
-
-    resources = state.get("resources")
-    if not resources:
-        # 1-1) compact "r": { "mp":..,"ip":..,"pp":.. }
-        r = state.get("r")
-        if isinstance(r, dict) and all(k in r for k in ("mp", "ip", "pp")):
-            zero = {"mp": 0, "ip": 0, "pp": 0}
-            resources = {"israel": zero.copy(), "iran": zero.copy()}
-            resources[side] = {
-                "mp": float(r["mp"]),
-                "ip": float(r["ip"]),
-                "pp": float(r["pp"]),
-            }
-        else:
-           
-            players = state.get("players")
-            if isinstance(players, dict) and any(s in players for s in ("israel", "iran")):
-                zero = {"mp": 0, "ip": 0, "pp": 0}
-                resources = {"israel": zero.copy(), "iran": zero.copy()}
-                for s in ("israel", "iran"):
-                    pres = (players.get(s) or {}).get("resources") or {}
-                    resources[s] = {
-                        "mp": float(pres.get("mp", 0)),
-                        "ip": float(pres.get("ip", 0)),
-                        "pp": float(pres.get("pp", 0)),
-                    }
-            else:
-                raise HTTPException(
-                    422,
-                    detail='Missing resources (either "resources", compact "r", or players[side].resources).',
-                )
-
+    # ---- 1) 숫자만 들어있는 옛 포맷 처리 (예: "t": 1 ) ----
+    if isinstance(raw_t, int):
+        # 최소한 턴 번호는 보존
+        t = {"n": int(raw_t)}
+    # ---- 2) 정상적인 dict 포맷 ----
+    elif isinstance(raw_t, dict):
+        t = raw_t
+    # ---- 3) 둘 다 없거나 전혀 이상한 타입 ----
     else:
-        if side not in resources or not isinstance(resources.get(side), dict):
-            if isinstance(resources, dict) and all(k in resources for k in ("mp", "ip", "pp")):
-                zero = {"mp": 0, "ip": 0, "pp": 0}
-                wrapped = {"israel": zero.copy(), "iran": zero.copy()}
-                wrapped[side] = {
-                    "mp": float(resources["mp"]),
-                    "ip": float(resources["ip"]),
-                    "pp": float(resources["pp"]),
-                }
-                resources = wrapped
-            else:
-                raise HTTPException(
-                    422,
-                    detail='Bad "resources" shape: expected per-side mapping or flat {mp,ip,pp}.',
-                )
+        raise HTTPException(
+            422,
+            detail=(
+                'The optimal plan generation couldn’t complete because the uploaded game state '
+                'is missing the required "t/turn" object (turn number, side, time segment).\n\n'
+                'Example compact:\n"t": { "n": 1, "s": "I", "ts": "m" }\n'
+                'Example verbose:\n"turn": { "number": 1, "side": "Israel", "segment": "Morning" }'
+            ),
+        )
 
-    return {"turn_number": int(n), "side": side, "phase": phase, "resources": resources}
+    # ---- 턴 번호 ----
+    n = t.get("turn_number", t.get("n", t.get("number", 1)))
+
+    # ---- side (Israel / Iran) ----
+    sd_raw = t.get("side", t.get("s"))
+    side = "israel"  # default
+    if isinstance(sd_raw, str):
+        side = _SIDE_NORMALIZE.get(sd_raw, "israel")
+
+    # ---- phase / segment ----
+    ph_raw = t.get("phase", t.get("segment", t.get("ts")))
+    phase = "morning"
+    if isinstance(ph_raw, str):
+        p = ph_raw.lower()
+        if p in ("m", "morning"):
+            phase = "morning"
+        elif p in ("a", "afternoon"):
+            phase = "afternoon"
+        elif p in ("n", "night"):
+            phase = "night"
+
+    # ---- resources ----
+    resources: Dict[str, Dict[str, float]] = {}
+    # 두 가지 포맷 지원: compact "r" 또는 verbose "resources"
+    r_compact = state.get("r")
+    r_verbose = state.get("resources")
+
+    if isinstance(r_verbose, dict):
+        # { "israel": {"pp":..}, "iran":{...} }
+        for s in ("israel", "iran"):
+            if s in r_verbose and isinstance(r_verbose[s], dict):
+                rs = r_verbose[s]
+                resources[s] = {
+                    "mp": float(rs.get("mp", 0)),
+                    "ip": float(rs.get("ip", 0)),
+                    "pp": float(rs.get("pp", 0)),
+                }
+    elif isinstance(r_compact, dict):
+        # { "I": {"P":..,"I":..,"M":..}, "R": {...} }
+        for k, v in r_compact.items():
+            norm_side = _SIDE_NORMALIZE.get(k, None)
+            if not norm_side or not isinstance(v, dict):
+                continue
+            resources[norm_side] = {
+                "mp": float(v.get("M", v.get("mp", 0))),
+                "ip": float(v.get("I", v.get("ip", 0))),
+                "pp": float(v.get("P", v.get("pp", 0))),
+            }
+    else:
+        # 둘 다 없으면 기본 0 리소스
+        resources = {
+            "israel": {"mp": 0.0, "ip": 0.0, "pp": 0.0},
+            "iran":   {"mp": 0.0, "ip": 0.0, "pp": 0.0},
+        }
+
+    return {
+        "turn_number": int(n),
+        "side": side,
+        "phase": phase,
+        "resources": resources,
+    }
 
 
 # ---------- Helpers ----------
@@ -361,7 +384,7 @@ class AirSide(AllowExtraModel):
     iran_squadrons: List[Squadron] = Field(default_factory=list)
 
 class GameState(AllowExtraModel):
-    t: Optional[dict] = None
+    t: Optional[Any] = None
     r: Optional[dict] = None
     o: Optional[dict] = None
     as_: AirSide = Field(..., alias="as")
@@ -372,7 +395,7 @@ class GameState(AllowExtraModel):
     opinion: Optional[dict] = None
     players: Optional[dict] = None
     meta: Optional[dict] = None
-    turn: Optional[dict] = None
+    turn: Optional[Any] = None
     resources: Optional[dict] = None  # ensure present for ctx checks
 
 class EnumerateActionsRequest(AllowExtraModel):
@@ -1106,6 +1129,7 @@ def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
     if limit and len(steps) > limit:
         steps = steps[-limit:]
     return {"game_id": game_id, "steps": steps}
+
 
 
 
