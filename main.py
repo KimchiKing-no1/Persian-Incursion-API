@@ -1,32 +1,75 @@
 import hashlib, json, uuid, importlib, copy
 from typing import Any, Dict, List, Optional
-
+from google.cloud import firestore
+from google.oauth2 import service_account
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel, Field, ConfigDict
 from fastapi.openapi.utils import get_openapi
 EPISODES: Dict[str, List[dict]] = {}
 
+# ---------- Firestore client (optional) ----------
+FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID")
+FIREBASE_CREDENTIALS_JSON = os.getenv("FIREBASE_CREDENTIALS_JSON")
 
-def log_transition(game_id: str,
-                   state: dict,
-                   side: str,
-                   action: dict,
-                   reward: float,
-                   done: bool,
-                   info: dict,
-                   policy: dict | None = None):
+firestore_client = None
+if FIREBASE_PROJECT_ID and FIREBASE_CREDENTIALS_JSON:
+    try:
+        creds_info = json.loads(FIREBASE_CREDENTIALS_JSON)
+        creds = service_account.Credentials.from_service_account_info(creds_info)
+        firestore_client = firestore.Client(
+            project=FIREBASE_PROJECT_ID,
+            credentials=creds,
+        )
+        print("✅ Firestore client initialized")
+    except Exception as e:
+        print(f"⚠ Firestore init failed: {e}")
+        firestore_client = None
+else:
+    print("ℹ Firestore env vars not set; logs only kept in memory.")
+
+
+
+def log_transition(game_id, state, side, action, reward, done, info, policy=None):
+    """
+    Save one (s, a, r, done, info, policy) transition.
+
+    - Always push into in-memory EPISODES[game_id]
+    - If Firestore is configured, also write to:
+      episodes/{game_id}/steps/{index}
+    """
     if game_id not in EPISODES:
         EPISODES[game_id] = []
-    EPISODES[game_id].append({
-        "state": state,
+
+    record = {
+        "index": len(EPISODES[game_id]),
         "side": side,
+        "state": state,
         "action": action,
-        "reward": reward,
-        "done": done,
-        "info": info,
-        "policy": policy or {}
-    })
+        "reward": float(reward),
+        "done": bool(done),
+        "info": info or {},
+        "policy": policy or {},
+    }
+
+    # 1) 메모리에 저장
+    EPISODES[game_id].append(record)
+
+    # 2) Firestore에 저장 (있으면)
+    if firestore_client is not None:
+        try:
+            doc_ref = (
+                firestore_client
+                .collection("episodes")
+                .document(game_id)
+                .collection("steps")
+                .document(str(record["index"]))
+            )
+            doc_ref.set(record)
+        except Exception as e:
+            # Firestore 실패해도 게임은 계속 돌아가야 하므로 에러만 로그로 남김
+            print(f"⚠ Firestore log_transition failed for {game_id}: {e}")
+
 
 # ---------- Errors ----------
 class StateError(HTTPException):
@@ -1031,6 +1074,39 @@ def turn_ai_move(req: EnumerateActionsRequest):
 
     exec_out = plan_execute(plan_req)
     return {"nonce": nonce, "chosen_steps": [s["action_id"] for s in plan["steps"]], "result": exec_out}
+from fastapi import Query
+
+@app.get("/episodes/{game_id}")
+def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
+    """
+    Return the last `limit` transitions for a given game_id.
+    MyGPT에서 tool call용으로 사용하기 좋게 설계.
+    """
+    # 1) Firestore 우선
+    if firestore_client is not None:
+        try:
+            steps_ref = (
+                firestore_client
+                .collection("episodes")
+                .document(game_id)
+                .collection("steps")
+                .order_by("index")
+            )
+            docs = list(steps_ref.stream())
+            steps = [d.to_dict() for d in docs]
+            if limit and len(steps) > limit:
+                steps = steps[-limit:]
+            return {"game_id": game_id, "steps": steps}
+        except Exception as e:
+            print(f"⚠ Firestore get_episode_logs failed for {game_id}: {e}")
+            # 실패하면 메모리 fallback
+
+    # 2) 메모리 fallback
+    steps = EPISODES.get(game_id, [])
+    if limit and len(steps) > limit:
+        steps = steps[-limit:]
+    return {"game_id": game_id, "steps": steps}
+
 
 
 
