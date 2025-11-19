@@ -570,8 +570,16 @@ def advisory_victory(payload: GameState):
 def _engine_actions(sdict: Dict[str, Any], side: str) -> List[Dict[str, Any]]:
     if not ge:
         return []
+    
+
+    state_for_engine = sdict.copy()
+
+    if state_for_engine.get("turn") is None:
+        state_for_engine["turn"] = state_for_engine.get("t") or {}
+    # --------------------------------------
+
     eng = ge.GameEngine()
-    return eng.get_legal_actions(sdict, side=side)  # engine respects costs/corridors/cards  # noqa
+    return eng.get_legal_actions(state_for_engine, side=side)
 
 def _derive_actions(state_dict: Dict[str, Any], side_to_move: str) -> List[EnumeratedAction]:
     ctx = ctx_from_state(state_dict)
@@ -1129,6 +1137,7 @@ def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
     if limit and len(steps) > limit:
         steps = steps[-limit:]
     return {"game_id": game_id, "steps": steps}
+
 
 
 
