@@ -48,12 +48,14 @@ class GameEngine(OpsLoggingMixin):
 
     # --------------------------- STATE HELPERS ---------------------------------
     def _ensure_player(self, state, side):
-        # SAFETY FIX: Handle case where 'players' key exists but is None (JSON null)
+        # 1. Check if 'players' is missing OR strictly None (JSON null)
         if state.get('players') is None:
             state['players'] = {}
             
-        # Now safe to call setdefault
+        # 2. Now safe to use setdefault because state['players'] is guaranteed to be a dict
         ps = state['players'].setdefault(side, {})
+        
+        # 3. Initialize sub-fields
         ps.setdefault('resources', {'pp': 0, 'ip': 0, 'mp': 0})
         ps.setdefault('river', [])
         ps.setdefault('deck', [])
