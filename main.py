@@ -971,6 +971,7 @@ def terms():
 
 
 @app.post("/plan/execute")
+@app.post("/plan/execute")
 def plan_execute(req: NoncedPlan):
     """
     Apply a validated plan to the provided state and return the NEW state
@@ -1012,7 +1013,11 @@ def plan_execute(req: NoncedPlan):
     # 4) Apply with engine if available
     s0 = copy.deepcopy(plan_state)
     log: List[str] = []
-    if ge and hasattr(ge, "apply_actions"):
+    
+    # FIX: Check class method existence, then instantiate
+    if ge and hasattr(ge.GameEngine, "apply_actions"):
+        eng = ge.GameEngine()
+        
         # Expect engine to accept a state and a list of abstract actions
         # Convert action_ids back to the engine action dicts we stored
         engine_actions = []
@@ -1055,7 +1060,8 @@ def plan_execute(req: NoncedPlan):
 
             engine_actions.append(payload)
         try:
-            s1, engine_log = ge.apply_actions(s0, engine_actions, side=side)
+            # FIX: Call instance method on 'eng'
+            s1, engine_log = eng.apply_actions(s0, engine_actions, side=side)
             if isinstance(engine_log, list):
                 log.extend([str(x) for x in engine_log])
             new_state = s1
@@ -1136,6 +1142,7 @@ def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
     if limit and len(steps) > limit:
         steps = steps[-limit:]
     return {"game_id": game_id, "steps": steps}
+
 
 
 
