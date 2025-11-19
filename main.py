@@ -571,11 +571,21 @@ def _engine_actions(sdict: Dict[str, Any], side: str) -> List[Dict[str, Any]]:
     if not ge:
         return []
     
-
+    # --- FIX: Sanitize state for engine ---
+    # The engine expects dicts, but Pydantic provides None for missing optional fields.
     state_for_engine = sdict.copy()
-
+    
+    # 1. Fix 'turn'
     if state_for_engine.get("turn") is None:
         state_for_engine["turn"] = state_for_engine.get("t") or {}
+
+    # 2. Fix 'opinion' (This is what caused your specific error)
+    if state_for_engine.get("opinion") is None:
+        state_for_engine["opinion"] = {}
+
+    # 3. Fix 'ti' (Target Intelligence) - Good practice to prevent next crash
+    if state_for_engine.get("ti") is None:
+        state_for_engine["ti"] = {}
     # --------------------------------------
 
     eng = ge.GameEngine()
@@ -1137,6 +1147,7 @@ def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
     if limit and len(steps) > limit:
         steps = steps[-limit:]
     return {"game_id": game_id, "steps": steps}
+
 
 
 
