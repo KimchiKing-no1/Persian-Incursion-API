@@ -124,42 +124,32 @@ _SIDE_NORMALIZE = {
 
 def _normalize_turn_and_resources(state: Dict[str, Any]) -> Dict[str, Any]:
     """
-    - t / turn 이 dict 이든, 그냥 숫자(int) 이든 모두 받아서
-      내부적으로 통일된 형태로 변환.
+    - Normalizes turn/time data.
+    - Ensures 'resources' always has 'israel' and 'iran' keys to prevent KeyErrors.
     """
     raw_t = state.get("turn", None)
     if raw_t is None:
         raw_t = state.get("t", None)
 
-    # ---- 1) 숫자만 들어있는 옛 포맷 처리 (예: "t": 1 ) ----
+    # ---- 1) Turn logic ----
     if isinstance(raw_t, int):
-        # 최소한 턴 번호는 보존
         t = {"n": int(raw_t)}
-    # ---- 2) 정상적인 dict 포맷 ----
     elif isinstance(raw_t, dict):
         t = raw_t
-    # ---- 3) 둘 다 없거나 전혀 이상한 타입 ----
     else:
-        raise HTTPException(
-            422,
-            detail=(
-                'The optimal plan generation couldn’t complete because the uploaded game state '
-                'is missing the required "t/turn" object (turn number, side, time segment).\n\n'
-                'Example compact:\n"t": { "n": 1, "s": "I", "ts": "m" }\n'
-                'Example verbose:\n"turn": { "number": 1, "side": "Israel", "segment": "Morning" }'
-            ),
-        )
+        # Default fallback to prevent crashes on missing turn info
+        t = {"n": 1}
 
-    # ---- 턴 번호 ----
+    # Turn number
     n = t.get("turn_number", t.get("n", t.get("number", 1)))
 
-    # ---- side (Israel / Iran) ----
+    # Side
     sd_raw = t.get("side", t.get("s"))
     side = "israel"  # default
     if isinstance(sd_raw, str):
         side = _SIDE_NORMALIZE.get(sd_raw, "israel")
 
-    # ---- phase / segment ----
+    # Phase
     ph_raw = t.get("phase", t.get("segment", t.get("ts")))
     phase = "morning"
     if isinstance(ph_raw, str):
@@ -171,14 +161,13 @@ def _normalize_turn_and_resources(state: Dict[str, Any]) -> Dict[str, Any]:
         elif p in ("n", "night"):
             phase = "night"
 
-    # ---- resources ----
+    # ---- 2) Resources logic ----
     resources: Dict[str, Dict[str, float]] = {}
-    # 두 가지 포맷 지원: compact "r" 또는 verbose "resources"
     r_compact = state.get("r")
     r_verbose = state.get("resources")
 
     if isinstance(r_verbose, dict):
-        # { "israel": {"pp":..}, "iran":{...} }
+        # Format: { "israel": {"pp":..}, "iran":{...} }
         for s in ("israel", "iran"):
             if s in r_verbose and isinstance(r_verbose[s], dict):
                 rs = r_verbose[s]
@@ -188,7 +177,7 @@ def _normalize_turn_and_resources(state: Dict[str, Any]) -> Dict[str, Any]:
                     "pp": float(rs.get("pp", 0)),
                 }
     elif isinstance(r_compact, dict):
-        # { "I": {"P":..,"I":..,"M":..}, "R": {...} }
+        # Format: { "I": {"P":..,"I":..,"M":..}, "R": {...} }
         for k, v in r_compact.items():
             norm_side = _SIDE_NORMALIZE.get(k, None)
             if not norm_side or not isinstance(v, dict):
@@ -198,12 +187,12 @@ def _normalize_turn_and_resources(state: Dict[str, Any]) -> Dict[str, Any]:
                 "ip": float(v.get("I", v.get("ip", 0))),
                 "pp": float(v.get("P", v.get("pp", 0))),
             }
-    else:
-        # 둘 다 없으면 기본 0 리소스
-        resources = {
-            "israel": {"mp": 0.0, "ip": 0.0, "pp": 0.0},
-            "iran":   {"mp": 0.0, "ip": 0.0, "pp": 0.0},
-        }
+    
+    # --- FIX: Ensure both sides exist with defaults if missing ---
+    for s in ("israel", "iran"):
+        if s not in resources:
+            resources[s] = {"mp": 0.0, "ip": 0.0, "pp": 0.0}
+    # -------------------------------------------------------------
 
     return {
         "turn_number": int(n),
@@ -1147,6 +1136,7 @@ def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
     if limit and len(steps) > limit:
         steps = steps[-limit:]
     return {"game_id": game_id, "steps": steps}
+
 
 
 
