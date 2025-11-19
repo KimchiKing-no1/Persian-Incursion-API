@@ -287,22 +287,25 @@ class GameEngine:
                     
                     # 4. Resolve Hit
                     if self._rng(state).random() <= p_hit:
-                        # 5. Armor Check
-                        t_armor = comp_data.get("armor_class", 0)
+                       # 5. Armor Check
+                        t_armor_val = comp_data.get("armor_class", 0)
                         
-                        # Logic: If weapon has NO pen (None), it treats armor as 0? 
-                        # Or if Pen < Armor, quarter damage? (Check rulebook logic here)
-                        # Standard Rule: If Pen < Armor, damage is quartered (or 0).
+                        # Handle "Heavy" string from PDF by treating it as armor 100
+                        if t_armor_val == "Heavy":
+                            t_armor_val = 100
+                        else:
+                            t_armor_val = int(t_armor_val)
+
                         damage_amount = hits_per_shot
                         
-                        if armor_pen is not None and t_armor != "Heavy":
-                            if int(armor_pen) < int(t_armor):
+                        # If weapon has penetration data
+                        if armor_pen is not None:
+                            # If Pen is less than Armor, damage is quartered (min 1)
+                            if int(armor_pen) < t_armor_val:
                                 damage_amount = max(1, int(damage_amount / 4))
                         
                         self._apply_component_damage(state, target, comp_id, damage_amount)
-                        self._log(state, f"{wname} HIT {target}:{comp_id} (Size {size}) for {damage_amount} box(es).")
-                    else:
-                        self._log(state, f"{wname} MISSED {target}:{comp_id} (Size {size}).")
+                        self._log(state, f"{wname} HIT {target}:{comp_id} (Size {size}, Armor {t_armor_val}) for {damage_amount} box(es).")
 
     def _armor_class_of_component(self, target_rules, comp_id):
         if comp_id in target_rules.get("Primary_Targets", {}):
