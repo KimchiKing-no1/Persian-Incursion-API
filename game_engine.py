@@ -48,7 +48,12 @@ class GameEngine(OpsLoggingMixin):
 
     # --------------------------- STATE HELPERS ---------------------------------
     def _ensure_player(self, state, side):
-        ps = state.setdefault('players', {}).setdefault(side, {})
+        # SAFETY FIX: Handle case where 'players' key exists but is None (JSON null)
+        if state.get('players') is None:
+            state['players'] = {}
+            
+        # Now safe to call setdefault
+        ps = state['players'].setdefault(side, {})
         ps.setdefault('resources', {'pp': 0, 'ip': 0, 'mp': 0})
         ps.setdefault('river', [])
         ps.setdefault('deck', [])
