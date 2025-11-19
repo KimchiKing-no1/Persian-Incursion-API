@@ -1009,6 +1009,9 @@ class GameEngine:
 
 
     def get_legal_actions(self, state, side=None):
+        if state is None:
+            raise ValueError("get_legal_actions called with state=None")
+        side_now = state.get('turn', {}).get('current_player', side)
         side = side or state.get("turn", {}).get("current_player", "israel")
         self._ensure_player_structs(state, side)
         res = state["players"][side]["resources"]
