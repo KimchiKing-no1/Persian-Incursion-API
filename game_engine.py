@@ -241,19 +241,68 @@ class GameEngine:
             return int(r[squadron_name].get('aircraft', 4))
         return 4
 
-    def _get_weapon_profile(self, weapon_name):
-        table = self.rules.get('pgm_table', {}) or self.rules.get('PGM_ATTACK_TABLE', {})
-        prof = table.get(weapon_name)
-        if prof:
-            return prof
-        return {
-            "vs": {
-                "soft": {"p_hit": 0.5, "hits": [1]},
-                "med":  {"p_hit": 0.35, "hits": [1]},
-                "hard": {"p_hit": 0.2,  "hits": [1]}
-            },
-            "reliability": 0.9
-        }
+    # In game_engine.py inside class GameEngine
+
+    def _get_pgm_hit_chance(self, weapon_name, target_size_class):
+        # Load the new PGM table from rules
+        pgm_table = self.rules.get("PGM_ATTACK_TABLE", {})
+        w_data = pgm_table.get(weapon_name)
+        
+        if not w_data: 
+            return 0.0 # Weapon not found
+            
+        # New data structure uses "Hit_Chance_Target_Size" dict
+        hit_chances = w_data.get("Hit_Chance_Target_Size", {})
+        
+        # Default to 0 if size class (e.g., "C") not found
+        return float(hit_chances.get(target_size_class, 0.0))
+
+    # In _resolve_airstrike_combat, replace the weapon loop with this:
+    
+            for w in wlist:
+                wname = w.get('weapon', 'GBU-31 JDAM')
+                qty = int(w.get('qty', 1))
+                
+                # Get weapon stats from new table
+                w_stats = self.rules.get("PGM_ATTACK_TABLE", {}).get(wname, {})
+                armor_pen = w_stats.get("Armor_Pen", 0) # None or int
+                hits_per_shot = w_stats.get("Hits", 1) # e.g., 2 boxes
+                
+                for _ in range(qty):
+                    comp_id = self._choice(state, comps_order)
+                    if not comp_id: continue
+
+                    # 1. Get Target Stats from new structure
+                    # Look in Primary or Secondary dicts
+                    comp_data = trules.get("Primary_Targets", {}).get(comp_id) or \
+                                trules.get("Secondary_Targets", {}).get(comp_id)
+                    
+                    if not comp_data: continue
+
+                    # 2. Get Size Class (Critical for new rules)
+                    size = comp_data.get("size_class", "D") # Default to D if missing
+                    
+                    # 3. Calculate Hit Probability
+                    p_hit = self._get_pgm_hit_chance(wname, size)
+                    
+                    # 4. Resolve Hit
+                    if self._rng(state).random() <= p_hit:
+                        # 5. Armor Check
+                        t_armor = comp_data.get("armor_class", 0)
+                        
+                        # Logic: If weapon has NO pen (None), it treats armor as 0? 
+                        # Or if Pen < Armor, quarter damage? (Check rulebook logic here)
+                        # Standard Rule: If Pen < Armor, damage is quartered (or 0).
+                        damage_amount = hits_per_shot
+                        
+                        if armor_pen is not None and t_armor != "Heavy":
+                            if int(armor_pen) < int(t_armor):
+                                damage_amount = max(1, int(damage_amount / 4))
+                        
+                        self._apply_component_damage(state, target, comp_id, damage_amount)
+                        self._log(state, f"{wname} HIT {target}:{comp_id} (Size {size}) for {damage_amount} box(es).")
+                    else:
+                        self._log(state, f"{wname} MISSED {target}:{comp_id} (Size {size}).")
 
     def _armor_class_of_component(self, target_rules, comp_id):
         if comp_id in target_rules.get("Primary_Targets", {}):
