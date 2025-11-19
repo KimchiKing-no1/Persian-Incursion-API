@@ -19,13 +19,13 @@ class OpsLoggingMixin:
     # Cost helpers
     # -----------------------------
     DEFAULT_COSTS = {
-        "airstrike": {"IP": 3, "MP": 3},  # ISR
+        "airstrike": {"ip": 3, "mp": 3},  # ISR
         # Special warfare / Terror are min..max; we log the actual chosen costs
-        "special_warfare_min": {"IP": 1, "MP": 1},  # ISR
-        "special_warfare_max": {"IP": 4, "MP": 3},
-        "terror_min": {"IP": 1, "MP": 1},          # IRN
-        "terror_max": {"IP": 4, "MP": 3},
-        "bm_per_battalion": {"IP": 0, "MP": 1},    # IRN (1 IP + 1 MP per battalion) – tune if your rules differ
+        "special_warfare_min": {"ip": 1, "mp": 1},  # ISR
+        "special_warfare_max": {"ip": 4, "mp": 3},
+        "terror_min": {"ip": 1, "mp": 1},          # IRN
+        "terror_max": {"ip": 4, "mp": 3},
+        "bm_per_battalion": {"ip": 0, "mp": 1},    # IRN (1 IP + 1 MP per battalion) – tune if your rules differ
         # Strait: MP 1..7 (+ optional IP up to 2). We’ll pass the chosen values in action.
         "strait_ip_cap": 2,
         "strait_mp_min": 1,
@@ -47,8 +47,10 @@ class OpsLoggingMixin:
                 continue
             if v < 0:
                 return False, f"invalid cost {k}={v}"
-            if res.get(k, 0) < v:
-                return False, f"needs {k}≥{v}, has {res.get(k,0)}"
+            # Ensure checks match the engine's resource keys (pp, ip, mp)
+            check_k = k.lower() 
+            if res.get(check_k, 0) < v:
+                return False, f"needs {k}≥{v}, has {res.get(check_k,0)}"
         return True, ""
 
     def _spend(self, state: Dict, side: str, cost: Dict[str, int]) -> None:
@@ -172,3 +174,4 @@ class OpsLoggingMixin:
         result = self._resolve_close_strait(state, side, mp_spent, ip_spent, israel_pp_counter)
 
         self._log(state, f"[RESULT] Strait: {result}")
+
