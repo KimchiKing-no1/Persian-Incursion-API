@@ -6,109 +6,20 @@ from mechanics import set_rules as mech_set_rules, opinion_roll
 from rules_global import RULES
 from actions_ops import OpsLoggingMixin
 
-# ===== OPINION → INCOME (rules-accurate) =====================================
-DOMESTIC_OPINION_INCOME = {
-    "israel": [
-        (9,  10, (6, 7, 10)),
-        (5,   8, (5, 6, 10)),
-        (2,   4, (4, 5, 10)),
-        (-1,  1, (3, 5,  9)),
-        (-4, -2, (2, 3,  8)),
-        (-8, -5, (1, 1,  8)),
-        (-10,-9, (0, 0,  6)),
-    ],
-    "iran": [
-        (9,  10, (1, 0, 0)),
-        (5,   8, (2, 1, 1)),
-        (2,   4, (3, 2, 3)),
-        (-1,  1, (4, 3, 5)),
-        (-4, -2, (5, 4, 6)),  
-        (-8, -5, (6, 5, 6)),
-        (-10,-9, (7, 6, 6)),
-    ],
-}
-
-THIRD_PARTY_OPINION_INCOME = {
-    "prc": [
-        ( 9, 10, {"israel": (2, 2, 0)}),
-        ( 5,  8, {"israel": (1, 2, 0)}),
-        ( 1,  4, {"israel": (1, 0, 0)}),
-        ( 0,  0, {"iran":   (1, 0, 0)}),
-        (-4, -1, {"iran":   (1, 1, 2)}),
-        (-8, -5, {"iran":   (2, 2, 2)}),
-        (-10,-9, {"iran":   (4, 4, 4)}),
-    ],
-    "russia": [
-        ( 9, 10, {"israel": (2, 2, 0)}),
-        ( 5,  8, {"israel": (1, 2, 0)}),
-        ( 1,  4, {"israel": (1, 0, 0)}),
-        ( 0,  0, {"iran":   (1, 0, 0)}),
-        (-4, -1, {"iran":   (1, 2, 0)}),
-        (-8, -5, {"iran":   (2, 3, 2)}),
-        (-10,-9, {"iran":   (4, 4, 4)}),
-    ],
-    "saudi_gcc": [
-        ( 9, 10, {"israel": (3, 2, 2)}),
-        ( 5,  8, {"israel": (2, 0, 0)}),
-        ( 1,  4, {"israel": (1, 0, 0)}),
-        ( 0,  0, {"israel": (0, 0, 0)}),
-        (-4, -1, {"iran":   (1, 0, 0)}),
-        (-8, -5, {"iran":   (2, 0, 0)}),
-        (-10,-9, {"iran":   (3, 2, 2)}),
-    ],
-    "un": [
-        ( 9, 10, {"israel": (4, 1, 0)}),
-        ( 5,  8, {"israel": (2, 0, 0)}),
-        ( 1,  4, {"israel": (1, 0, 0)}),
-        ( 0,  0, {"israel": (0, 0, 0)}),
-        (-4, -1, {"iran":   (1, 0, 0)}),
-        (-8, -5, {"iran":   (2, 0, 0)}),
-        (-10,-9, {"iran":   (4, 1, 0)}),
-    ],
-    "jordan": [
-        ( 9, 10, {"israel": (0, 0, 0)}),
-        ( 5,  8, {"israel": (2, 0, 0)}),
-        ( 1,  4, {"israel": (1, 0, 0)}),
-        ( 0,  0, {"israel": (0, 0, 0)}),
-        (-4, -1, {"iran":   (1, 0, 0)}),
-        (-8, -5, {"iran":   (2, 0, 0)}),
-        (-10,-9, {"iran":   (3, 2, 2)}),
-    ],
-    "turkey": [
-        ( 9, 10, {"israel": (3, 2, 2)}),
-        ( 5,  8, {"israel": (2, 1, 0)}),
-        ( 1,  4, {"israel": (1, 0, 0)}),
-        ( 0,  0, {"israel": (0, 0, 0)}),
-        (-4, -1, {"iran":   (1, 0, 0)}),
-        (-8, -5, {"iran":   (2, 1, 0)}),
-        (-10,-9, {"iran":   (3, 2, 0)}),
-    ],
-    "usa": [
-        ( 9, 10, {"israel": (4, 4, 4)}),
-        ( 5,  8, {"israel": (2, 3, 2)}),
-        ( 1,  4, {"israel": (1, 2, 0)}),
-        ( 0,  0, {"israel": (1, 0, 0)}),
-        (-4, -1, {"iran":   (1, 0, 0)}),
-        (-8, -5, {"iran":   (2, 1, 1)}),
-        (-10,-9, {"iran":   (4, 2, 1)}),
-    ],
-}
-
-_THIRD_PARTY_ALIASES = {
-    "china": "prc", "prc": "prc",
-    "russia": "russia",
-    "saudi": "saudi_gcc", "saudi_arabia": "saudi_gcc", "gcc": "saudi_gcc",
-    "un": "un", "united_nations": "un",
-    "jordan": "jordan",
-    "turkey": "turkey",
-    "usa": "usa", "united_states": "usa", "us": "usa",
-}
 
 def _sum3(a, b): return (a[0]+b[0], a[1]+b[1], a[2]+b[2])
 
+# In game_engine.py
+
 def opinion_income_from_domestic(state, side):
+    # Change: Load from state rules instead of hardcoded dict
+    table = state.get("rules", {}).get("OPINION_INCOME_TABLE", {})
     val = int(state.get("opinion", {}).get("domestic", {}).get(side, 0))
-    for lo, hi, trip in DOMESTIC_OPINION_INCOME[side]:
+    
+    # Check side exists in table
+    if side not in table: return (0,0,0)
+    
+    for lo, hi, trip in table[side]:
         if lo <= val <= hi:
             return trip
     return (0,0,0)
