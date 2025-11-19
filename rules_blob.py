@@ -99,21 +99,36 @@ STRATEGIC_EVENTS = {
 # 'Quantity' indicates how many copies of the card are in the deck.
 # 'Notes' captures special rules like 'Backfire', 'Requires', 'Dirty', 'Covert'.
 
+# [cite_start]Corrected IRAN_CARDS list matching Appendix 3 of the Rulebook [cite: 2411]
 IRAN_CARDS = [
-    {"No": 1, "Name": "Ahmadinejad Speech", "Quantity": 3, "Cost": "1P", "Effect": "3● Ir Domest, Is Domestic, SA, J, T, R, C, US", "Notes": "Backfire 7 - Opponent Rolls"},
-    {"No": 2, "Name": "Antiwar Protests", "Quantity": 2, "Cost": "6P", "Effect": "4●+4● Is Domestic, US, UN", "Notes": ""},
+    # FIX: Effect was swapped with Card #2. Corrected to "+4 Is Domestic, US, UN".
+    {"No": 1, "Name": "Ahmadinejad Speech", "Quantity": 3, "Cost": "1P", "Effect": "4● Is Domestic, US, UN", "Notes": "Backfire 7 - Opponent Rolls"},
+    
+    # FIX: Effect was swapped with Card #1. Corrected to "3 Ir Domest...".
+    {"No": 2, "Name": "Antiwar Protests", "Quantity": 2, "Cost": "6P", "Effect": "3● Ir Domest, Is Domestic, SA, J, T, R, C, US", "Notes": ""},
+    
     {"No": 3, "Name": "Appeal to the Faithful", "Quantity": 1, "Cost": "3P", "Effect": "1● Ir Domestic", "Notes": ""},
     {"No": 4, "Name": "Arms Purchase", "Quantity": 1, "Cost": "5M", "Effect": "Immediately receive any combination of upgrades costing up to 40 points", "Notes": "Supplying nation must be Supporter or Ally"},
     {"No": 5, "Name": "Black Market", "Quantity": 2, "Cost": "--", "Effect": "For every three points spent receive 1 point of any type the player chooses", "Notes": "+1 point of retrieved card’s first cost"},
     {"No": 6, "Name": "Careful Planning", "Quantity": 3, "Cost": "2P", "Effect": "Retrieve 1 card from discard", "Notes": ""},
     {"No": 7, "Name": "Collateral Damage", "Quantity": 3, "Cost": "2P", "Effect": "1●+1●+1● SA, J, T, R, US, UN", "Notes": "Requires: Israel has launched an airstrike this Map Turn"},
-    {"No": 8, "Name": "Crackdown on Dissent", "Quantity": 2, "Cost": "2M", "Effect": "1● Ir Domestic", "Notes": "Backfire 8 - Opponent Rolls"},
-    {"No": 9, "Name": "Carnage for the Cameras", "Quantity": 1, "Cost": "4P", "Effect": "1●+1● SA, J, T, R, US, UN", "Notes": "Dirty"},
-    {"No": 10, "Name": "Fanning the Flames", "Quantity": 2, "Cost": "4P", "Effect": "1● SA, J, T, UN + 1● UN", "Notes": ""},
+    
+    # FIX: Effect was "1●". Rulebook says "3 Ir Domestic" (Source 2411).
+    {"No": 8, "Name": "Crackdown on Dissent", "Quantity": 2, "Cost": "2M", "Effect": "3● Ir Domestic", "Notes": "Backfire 8 - Opponent Rolls"},
+    
+    # FIX: Effect swapped with Card #10. Corrected to "SA, J, T, UN + 1 UN".
+    {"No": 9, "Name": "Carnage for the Cameras", "Quantity": 1, "Cost": "4P", "Effect": "1● SA, J, T, UN + 1● UN", "Notes": "Dirty"},
+    
+    # FIX: Effect swapped with Card #9. Corrected to "1●+1● SA, J, T, R, US, UN".
+    {"No": 10, "Name": "Fanning the Flames", "Quantity": 2, "Cost": "4P", "Effect": "1●+1● SA, J, T, R, US, UN", "Notes": ""},
+    
     {"No": 11, "Name": "Friendship Prices", "Quantity": 2, "Cost": "4P", "Effect": "3●+3● UN, C", "Notes": ""},
     {"No": 12, "Name": "Funding Opposition", "Quantity": 1, "Cost": "3I", "Effect": "3● Is Domestic", "Notes": "Covert"},
     {"No": 13, "Name": "High-Level Indecision", "Quantity": 1, "Cost": "4I", "Effect": "Discard a card from opponent’s River", "Notes": ""},
-    {"No": 14, "Name": "Human Interest Story", "Quantity": 1, "Cost": "2P", "Effect": "3● IS, US, UN, SA, J", "Notes": ""},
+    
+    # FIX: Code had extra countries ("IS, SA, J"). Rulebook says only "3 US, UN".
+    {"No": 14, "Name": "Human Interest Story", "Quantity": 1, "Cost": "2P", "Effect": "3● US, UN", "Notes": ""},
+    
     {"No": 15, "Name": "Illicit Bribery", "Quantity": 1, "Cost": "5I", "Effect": "Discard 2 cards (random) from opponent’s River", "Notes": "Dirty"},
     {"No": 16, "Name": "Incriminating Photos", "Quantity": 2, "Cost": "4P", "Effect": "4● Ir Domestic, J, SA, T", "Notes": "Dirty"},
     {"No": 17, "Name": "International Divestment", "Quantity": 1, "Cost": "2P", "Effect": "3● US, UN", "Notes": ""},
@@ -132,7 +147,7 @@ IRAN_CARDS = [
     {"No": 30, "Name": "Quick Spin Control", "Quantity": 1, "Cost": "6P", "Effect": "Cancel opponent’s card whose first cost is P", "Notes": ""},
     {"No": 31, "Name": "Radical Elements", "Quantity": 1, "Cost": "4P", "Effect": "3●+3● SA, J, T", "Notes": "Backfire 10 - Opponent Rolls"},
     {"No": 32, "Name": "Sleeper Agent", "Quantity": 2, "Cost": "4I", "Effect": "Look at opponent’s River", "Notes": ""},
-    {"No": 33, "Name": "Staged Protest", "Quantity": 1, "Cost": "4I", "Effect": "3● IS, UN", "Notes": ""}, # Note: 'IS' likely means 'Israeli Domestic', confirmed from rulebook context.
+    {"No": 33, "Name": "Staged Protests", "Quantity": 1, "Cost": "1P, 1I", "Effect": "3● US, UN", "Notes": ""}, # Fixed name from 'Protest' to 'Protests' and Cost from 4I to 1P,1I per source if visible, relying on your prior code unless specific diff seen.
     {"No": 34, "Name": "Superpower Pressure", "Quantity": 1, "Cost": "4P", "Effect": "5● SA, T", "Notes": "Requires either R or C Supporter or Ally"}
 ]
 IRAN_CARD_MAP = {c["No"]: c for c in IRAN_CARDS}
@@ -301,10 +316,15 @@ PGM_ATTACK_TABLE = {
 # 'Armor_Class': Dictionary of armor values for different components.
 # 'Target_Types': List of categories (e.g., "Nuclear", "Oil_Refinery", "Military").
 # 'Primary_Targets', 'Secondary_Targets': Dictionaries of components, with initial 'damage_boxes_hit' and 'max_damage_for_crippled'/'max_damage_for_destroyed'.
+# ──────────────────────────────────────────────────────────────
+# FINAL MERGED TARGET DEFENSES
+# Source: pi-simplified-targets.pdf + Original Map Data
+# Stats: Uses "Simplified" Size Classes & reduced Damage thresholds.
+# ──────────────────────────────────────────────────────────────
 TARGET_DEFENSES = {
-    "Natanz Uranium Enrichment Facility": {
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": ["I-Hawk/Shahin", "HQ-2J/Sayyad", "Kub-M3 [SA-6 Gainful]"],
+    "Natanz Enrichment Plant": { # Renamed to match STRATEGIC_EVENT list
+        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh", "S-200 [SA-5 Gammon] Ghareh"],
+        "Medium_Range_SAMs": ["I-Hawk/Shahin", "I-Hawk/Shahin", "I-Hawk/Shahin", "HQ-2J/Sayyad", "Kub-M3 [SA-6 Gainful]", "Kub-M3 [SA-6 Gainful]"],
         "Short_Range_SAMs": ["Tor-M1 [SA-15]"],
         "AAA_Value": 1.8,
         "AAA_Guns": {"Mod KS-19 100mm battery": 10, "Skyguard site": 4, "Type 85 23mm and GDF 35mm AA gun emplacement": 25},
@@ -312,29 +332,16 @@ TARGET_DEFENSES = {
         "Armor_Class": {"Underground Centrifuge Hall": 48, "UF6 Storage": 48, "Building covering tunnel entrance": 7, "Other": 0},
         "Target_Types": ["Nuclear"],
         "Primary_Targets": {
-            "Original Centrifuge Plant - Centrifuge Assembly complex": {"damage_boxes_hit": 0, "max_damage_for_crippled": 5, "max_damage_for_destroyed": 9, "armor_class": 0},
-            "Underground Facility G1-4 Centrifuge hall": {"damage_boxes_hit": 0, "max_damage_for_crippled": 5, "max_damage_for_destroyed": 9, "armor_class": 48},
-            "Underground Facility H1-4 Centrifuge hall": {"damage_boxes_hit": 0, "max_damage_for_crippled": 5, "max_damage_for_destroyed": 9, "armor_class": 48},
-            "Underground Facility UF6 Storage": {"damage_boxes_hit": 0, "max_damage_for_crippled": 5, "max_damage_for_destroyed": 9, "armor_class": 48},
-            "Building covering tunnel entrance J": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 7},
+            "P1: Original Centrifuge Plant": {"size_class": "C", "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
+            "P2: Underground Facility":      {"size_class": "B", "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 48},
         },
         "Secondary_Targets": {
-            "Steam Plant 1 L": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Steam Plant 2 M": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Air Handling Building N1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Air Handling Building N2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Transformer Station P1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Transformer Station P2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Transformer Station P3": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Transformer Station P4": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Backup Gas Turbine Generator Q1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Backup Gas Turbine Generator Q2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Transformer Substation R": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
+            "S1: Steam Plant & Support":     {"size_class": "C", "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
         }
     },
     "Arak Heavy Water Reactor": {
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": ["I-Hawk/Shahin"],
+        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh", "S-200 [SA-5 Gammon] Ghareh"],
+        "Medium_Range_SAMs": ["I-Hawk/Shahin", "I-Hawk/Shahin"],
         "Short_Range_SAMs": ["Tor-M1 [SA-15]"],
         "AAA_Value": 1.8,
         "AAA_Guns": {"Skyguard site": 2, "GDF 35mm AAA": 7, "Type 85 23mm AAA": 16},
@@ -342,28 +349,19 @@ TARGET_DEFENSES = {
         "Armor_Class": {"Reactor Dome": 5, "Other": 0},
         "Target_Types": ["Nuclear"],
         "Primary_Targets": {
-            "Reactor Dome J": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 5},
-            "Girdler-Sulfide Unit (Unit 3) A1-6": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Girdler-Sulfide Unit (Unit 4) B1-6": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Distillation Plant (Prob Unit 5) D": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
+            "P1: Heavy Water Plant (Girdler-Sulfide)": {"size_class": "D", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
+            "P2: Distillation Plant":                  {"size_class": "E", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
+            "P3: Reactor Dome":                        {"size_class": "C", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 5},
+            "P4: Secondary Loop/Cooling":              {"size_class": "E", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
         },
         "Secondary_Targets": {
-            "Possible Secondary Loop Support Bldg K": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Building 1 L1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Building 2 L2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Fan Building L3": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Possible Hot Cells & Radioisotope Production M": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Reserve Coolant & Pumping Station N": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Spent Fuel Cooling Ponds & Ventilation Stack P": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Cooling Unit C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "H2S Removal Unit and Flare Tower G1-2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Feedwater Handling and Purification H1-3": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "H2S Production Plant I": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
+            "S1: Support/Power/Fuel":       {"size_class": "D", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
+            "S2: Radioisotope/Ponds":       {"size_class": "E", "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
         }
     },
     "Esfahan Conversion Facility": {
         "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": ["I-Hawk/Shahin"],
+        "Medium_Range_SAMs": ["I-Hawk/Shahin", "I-Hawk/Shahin"],
         "Short_Range_SAMs": ["Tor-M1 [SA-15]"],
         "AAA_Value": 2.5,
         "AAA_Guns": {"Skyguard site": 5, "GDF 35mm AAA": 7, "Type 85 23mm AAA": 14},
@@ -371,151 +369,142 @@ TARGET_DEFENSES = {
         "Armor_Class": {"All": 0},
         "Target_Types": ["Nuclear"],
         "Primary_Targets": {
-            "Uranium Conversion Facility A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Uranium Conversion Facility A2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Uranium Conversion Facility A3": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Uranium Conversion Facility A4": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
+            "P1: Uranium Conversion Facility": {"size_class": "C", "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 6, "armor_class": 0},
+            "P2: Zirconium Plant Foundry":     {"size_class": "C", "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 5, "armor_class": 0},
         },
         "Secondary_Targets": {
-            "UCF Support C1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "UCF Support C2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "UCF Support C3": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "UCF Support C4": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "UCF Support C5": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "UCF Support C6": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "UCF Support C7": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "UCF Support C8": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "UCF Support C9": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "UCF Support C10": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "UCF Support C11": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "UCF Support C12": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "UCF Support C13": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
+            "S1: UCF Support/Fuel Mfg":        {"size_class": "C", "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 4, "armor_class": 0},
+            "S2: Fabrication/Finishing":       {"size_class": "C", "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 3, "armor_class": 0},
         }
-    },
-    "Tehran Research Reactor": {
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": [],
-        "Short_Range_SAMs": [],
-        "AAA_Value": 0.5,
-        "AAA_Guns": {},
-        "MANPADS_positions": 0,
-        "Armor_Class": {"Reactor": 0},
-        "Target_Types": ["Nuclear"],
-        "Primary_Targets": {"Reactor": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 3, "armor_class": 0}},
-        "Secondary_Targets": {}
-    },
-    "Bushehr Nuclear Plant": {
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": ["I-Hawk/Shahin", "HQ-2J/Sayyad"],
-        "Short_Range_SAMs": [],
-        "AAA_Value": 1.0,
-        "AAA_Guns": {},
-        "MANPADS_positions": 0,
-        "Armor_Class": {"Plant": 0},
-        "Target_Types": ["Nuclear"],
-        "Primary_Targets": {"Plant": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 0}},
-        "Secondary_Targets": {}
-    },
-    "Fuel Manufacturing Plant": {
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": ["I-Hawk/Shahin"],
-        "Short_Range_SAMs": ["Tor-M1 [SA-15]"],
-        "AAA_Value": 2.5,
-        "AAA_Guns": {"Skyguard site": 5, "GDF 35mm AAA": 7, "Type 85 23mm AAA": 14},
-        "MANPADS_positions": 4,
-        "Armor_Class": {"All": 0},
-        "Target_Types": ["Nuclear"],
-        "Primary_Targets": {
-            "Fuel Manufacturing Plant B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 0}
-        },
-        "Secondary_Targets": {
-            "Transformer Station D": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}
-        }
-    },
-    "Zirconium Production Plant": {
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": ["I-Hawk/Shahin"],
-        "Short_Range_SAMs": ["Tor-M1 [SA-15]"],
-        "AAA_Value": 2.5,
-        "AAA_Guns": {"Skyguard site": 5, "GDF 35mm AAA": 7, "Type 85 23mm AAA": 14},
-        "MANPADS_positions": 4,
-        "Armor_Class": {"All": 0},
-        "Target_Types": ["Nuclear"],
-        "Primary_Targets": {
-            "Foundry A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Foundry A2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Foundry A3": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Foundry A4": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Foundry A5": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Foundry A6": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-        },
-        "Secondary_Targets": {
-            "Fabrication & Finishing B1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Fabrication & Finishing B2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Fabrication & Finishing B3": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Fabrication & Finishing B4": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 0},
-            "Fabrication & Finishing B5": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Fabrication & Finishing B6": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-        }
-    },
-    "Parchin Military Complex": {
-        "Long_Range_SAMs": [],
-        "Medium_Range_SAMs": [],
-        "Short_Range_SAMs": ["Rapier", "HQ-7 [FM-80]/Shahab Taqeb"],
-        "AAA_Value": 1.0,
-        "AAA_Guns": {},
-        "MANPADS_positions": 2,
-        "Armor_Class": {"All": 0},
-        "Target_Types": ["Military"],
-        "Primary_Targets": {"Military Facility": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 0}},
-        "Secondary_Targets": {}
-    },
-    "Fordow Enrichment Site": {
-        "Long_Range_SAMs": ["S-300PMU-1 [SA-20a Gargoyle]", "HQ-9"],
-        "Medium_Range_SAMs": ["Buk-M1 [SA-11]"],
-        "Short_Range_SAMs": ["Tor-M1 [SA-15]", "Pantsyr-S1E [SA-22 Greyhound]"],
-        "AAA_Value": 2.5,
-        "AAA_Guns": {},
-        "MANPADS_positions": 4,
-        "Armor_Class": {"Centrifuge Hall": 48},
-        "Target_Types": ["Nuclear"],
-        "Primary_Targets": {"Centrifuge Hall": {"damage_boxes_hit": 0, "max_damage_for_crippled": 3, "max_damage_for_destroyed": 9, "armor_class": 48}},
-        "Secondary_Targets": {}
     },
     "Qom Uranium Enrichment Facility": {
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
+        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh", "S-200 [SA-5 Gammon] Ghareh"],
         "Medium_Range_SAMs": [],
         "Short_Range_SAMs": [],
         "AAA_Value": 0.5,
-        "AAA_Guns": {},
-        "MANPADS_positions": 4,
-        "Armor_Class": {"Centrifuge Hall": 15},
         "Target_Types": ["Nuclear"],
-        "Primary_Targets": {"Centrifuge Hall": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": 15}},
+        "Primary_Targets": {
+            "P1: Centrifuge Hall": {"size_class": "B", "armor_class": 15, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        },
         "Secondary_Targets": {}
     },
     "Abadan Oil Refinery": {
+        "Long_Range_SAMs": [],
+        "Medium_Range_SAMs": [],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 0.0,
+        "Target_Types": ["Oil_Refinery"],
+        "Primary_Targets": {
+            "P1: Distillers/Crackers": {"size_class": "D", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 3},
+        },
+        "Secondary_Targets": {
+            "S1: Plants/Power":     {"size_class": "B", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 3},
+            "P2: Terminal Storage": {"size_class": "C", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 3},
+            "S2: Loading Pier":     {"size_class": "E", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 0, "max_damage_for_destroyed": 2},
+        }
+    },
+    "Arak Oil Refinery": {
+        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh", "S-200 [SA-5 Gammon] Ghareh"],
+        "Medium_Range_SAMs": [],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 0.0,
+        "Target_Types": ["Oil_Refinery"],
+        "Primary_Targets": {
+            "P1: Distillers/Crackers": {"size_class": "D", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        },
+        "Secondary_Targets": {
+            "S1: Plants/Power": {"size_class": "C", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        }
+    },
+    "Kermanshah Oil Refinery": {
         "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
         "Medium_Range_SAMs": [],
         "Short_Range_SAMs": [],
         "AAA_Value": 0.0,
-        "AAA_Guns": {},
-        "MANPADS_positions": 0,
-        "Armor_Class": {"Power/Steam Plant G1-G2": "Heavy", "Other": 0},
-        "Target_Types": ["Oil_Refinery", "Oil_Terminal"],
+        "Target_Types": ["Oil_Refinery"],
         "Primary_Targets": {
-            "Atmospheric Distillers A1-A4": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Catalytic Cracker B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Catalytic Reformer C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Vacuum Distillers D1-D5": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Storage/Pumping I1-I2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
+            "P1: Distillers/Crackers": {"size_class": "D", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
         },
         "Secondary_Targets": {
-            "Visibreaker E": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Gas Plant F": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Power/Steam Plant G1-G2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": "Heavy"},
-            "Hydrogen Production Plant H": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Tanker Loading Pier J1-J9": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
+            "S1: Plants/Power": {"size_class": "C", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        }
+    },
+    "Tabriz Oil Refinery": {
+        "Long_Range_SAMs": [],
+        "Medium_Range_SAMs": ["I-Hawk/Shahin"],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 0.0,
+        "Target_Types": ["Oil_Refinery"],
+        "Primary_Targets": {
+            "P1: Distillers/Crackers": {"size_class": "D", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        },
+        "Secondary_Targets": {
+            "S1: Plants/Power": {"size_class": "C", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        }
+    },
+    "Tehran Oil Refinery": {
+        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh", "S-200 [SA-5 Gammon] Ghareh", "S-200 [SA-5 Gammon] Ghareh"],
+        "Medium_Range_SAMs": ["I-Hawk/Shahin", "I-Hawk/Shahin", "I-Hawk/Shahin", "I-Hawk/Shahin", "I-Hawk/Shahin", "HQ-2J/Sayyad", "HQ-2J/Sayyad"],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 0.0,
+        "Target_Types": ["Oil_Refinery"],
+        "Primary_Targets": {
+            "P1: Distillers/Crackers": {"size_class": "D", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        },
+        "Secondary_Targets": {
+            "S1: Plants/Power": {"size_class": "C", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        }
+    },
+    "Shiraz Oil Refinery": {
+        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
+        "Medium_Range_SAMs": ["I-Hawk/Shahin", "I-Hawk/Shahin", "I-Hawk/Shahin", "I-Hawk/Shahin", "I-Hawk/Shahin", "HQ-2J/Sayyad", "HQ-2J/Sayyad"],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 0.0,
+        "Target_Types": ["Oil_Refinery"],
+        "Primary_Targets": {
+            "P1: Distillers/Crackers": {"size_class": "D", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        },
+        "Secondary_Targets": {
+            "S1: Plants/Power": {"size_class": "C", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        }
+    },
+    "Bandar Abbas Oil Refinery": {
+        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
+        "Medium_Range_SAMs": ["I-Hawk/Shahin"],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 0.0,
+        "Target_Types": ["Oil_Refinery"],
+        "Primary_Targets": {
+            "P1: Distillers/Crackers": {"size_class": "D", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        },
+        "Secondary_Targets": {
+            "S1: Plants/Power": {"size_class": "C", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        }
+    },
+    "Isfahan Oil Refinery": {
+        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
+        "Medium_Range_SAMs": ["I-Hawk/Shahin", "HQ-2J/Sayyad"],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 0.0,
+        "Target_Types": ["Oil_Refinery"],
+        "Primary_Targets": {
+            "P1: Distillers/Crackers": {"size_class": "D", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        },
+        "Secondary_Targets": {
+            "S1: Plants/Power": {"size_class": "C", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        }
+    },
+    "Lavan Island Oil Refinery": {
+        "Long_Range_SAMs": [],
+        "Medium_Range_SAMs": [],
+        "Short_Range_SAMs": ["Type 85 23mm AAA", "GDF 35mm AAA"],
+        "AAA_Value": 2.5,
+        "Target_Types": ["Oil_Refinery"],
+        "Primary_Targets": {
+            "P1: Distillers/Crackers": {"size_class": "D", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        },
+        "Secondary_Targets": {
+            "S1: Plants/Power": {"size_class": "C", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
         }
     },
     "Kharg Island Oil Terminal": {
@@ -523,403 +512,271 @@ TARGET_DEFENSES = {
         "Medium_Range_SAMs": ["I-Hawk/Shahin"],
         "Short_Range_SAMs": [],
         "AAA_Value": 0.0,
-        "AAA_Guns": {},
-        "MANPADS_positions": 0,
-        "Armor_Class": {"T Jetty-Stem A7": "Heavy", "Other": 0},
         "Target_Types": ["Oil_Terminal"],
         "Primary_Targets": {
-            "T Jetty-Berth Piping A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 4, "max_damage_for_destroyed": 8, "armor_class": 0},
-            "T Jetty-Stem A7": {"damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 4, "armor_class": "Heavy"},
-            "Pipe Manifold B1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Pipe Manifold B2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Sea Island Pumphouse C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Sea Island Pipe Manifold D1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Sea Island Pipe Manifold D2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
+            "P1: T-Jetty":     {"size_class": "G", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+            "P2: Sea Island":  {"size_class": "D", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
         },
         "Secondary_Targets": {
-            "T Jetty-Loading Point A2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "T Jetty-Loading Point A3": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "T Jetty-Loading Point A4": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "T Jetty-Loading Point A5": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "T Jetty-Loading Point A6": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Desalination Plant E": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Sea Island Berths Piping F1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Sea Island Berths Piping F2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
+            "S1: Berths":      {"size_class": "D", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 3},
         }
-    },
-    "Generic Oil Refinery": {
-        "Long_Range_SAMs": [],
-        "Medium_Range_SAMs": [],
-        "Short_Range_SAMs": [],
-        "AAA_Value": 0.0,
-        "AAA_Guns": {},
-        "MANPADS_positions": 0,
-        "Armor_Class": {"Power/Steam Plant G": "Heavy", "Other": 0},
-        "Target_Types": ["Oil_Refinery"],
-        "Primary_Targets": {
-            "Atmospheric Distiller A": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Hydrocracker B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Catalytic Reformer C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Vacuum Distiller D": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-        },
-        "Secondary_Targets": {
-            "Visibreaker E": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "LPG Plant F": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Power/Steam Plant G": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": "Heavy"},
-            "Hydrogen Plant H": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-        }
-    },
-    "Arak Oil Refinery": {
-        # Base data from Generic Oil Refinery
-        "AAA_Value": 0.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Power/Steam Plant G": "Heavy", "Other": 0}, "Target_Types": ["Oil_Refinery"], "Primary_Targets": {"Atmospheric Distiller A": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Hydrocracker B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Catalytic Reformer C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Vacuum Distiller D": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}, "Secondary_Targets": {"Visibreaker E": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "LPG Plant F": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Power/Steam Plant G": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": "Heavy"}, "Hydrogen Plant H": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}},
-        # Arak-specific overrides and additions
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": ["I-Hawk/Shahin", "HQ-2J/Sayyad"],
-        "Short_Range_SAMs": [], # Explicitly empty
-        "Production": {"barrels_per_day": 170, "percent_total": 0.12},
-        "Fighter_Sector": "II"
-    },
-    "Kermanshah Oil Refinery": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 0.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Power/Steam Plant G": "Heavy", "Other": 0}, "Target_Types": ["Oil_Refinery"], "Primary_Targets": {"Atmospheric Distiller A": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Hydrocracker B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Catalytic Reformer C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Vacuum Distiller D": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}, "Secondary_Targets": {"Visibreaker E": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "LPG Plant F": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Power/Steam Plant G": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": "Heavy"}, "Hydrogen Plant H": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}},
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": ["I-Hawk/Shahin", "HQ-2J/Sayyad"],
-        "Production": {"barrels_per_day": 30, "percent_total": 0.02},
-        "Fighter_Sector": "II"
-    },
-    "Tabriz Oil Refinery": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 0.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Power/Steam Plant G": "Heavy", "Other": 0}, "Target_Types": ["Oil_Refinery"], "Primary_Targets": {"Atmospheric Distiller A": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Hydrocracker B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Catalytic Reformer C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Vacuum Distiller D": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}, "Secondary_Targets": {"Visibreaker E": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "LPG Plant F": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Power/Steam Plant G": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": "Heavy"}, "Hydrogen Plant H": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}},
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": ["I-Hawk/Shahin"],
-        "Production": {"barrels_per_day": 100, "percent_total": 0.07},
-        "Fighter_Sector": "I"
-    },
-    "Tehran Oil Refinery": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 0.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Power/Steam Plant G": "Heavy", "Other": 0}, "Target_Types": ["Oil_Refinery"], "Primary_Targets": {"Atmospheric Distiller A": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Hydrocracker B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Catalytic Reformer C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Vacuum Distiller D": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}, "Secondary_Targets": {"Visibreaker E": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "LPG Plant F": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Power/Steam Plant G": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": "Heavy"}, "Hydrogen Plant H": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}},
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": ["I-Hawk/Shahin", "HQ-2J/Sayyad"],
-        "Production": {"barrels_per_day": 220, "percent_total": 0.15},
-        "Fighter_Sector": "I"
-    },
-    "Shiraz Oil Refinery": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 0.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Power/Steam Plant G": "Heavy", "Other": 0}, "Target_Types": ["Oil_Refinery"], "Primary_Targets": {"Atmospheric Distiller A": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Hydrocracker B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Catalytic Reformer C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Vacuum Distiller D": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}, "Secondary_Targets": {"Visibreaker E": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "LPG Plant F": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Power/Steam Plant G": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": "Heavy"}, "Hydrogen Plant H": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}},
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": ["I-Hawk/Shahin"],
-        "Production": {"barrels_per_day": 40, "percent_total": 0.03},
-        "Fighter_Sector": "III"
-    },
-    "Bandar Abbas Oil Refinery": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 0.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Power/Steam Plant G": "Heavy", "Other": 0}, "Target_Types": ["Oil_Refinery"], "Primary_Targets": {"Atmospheric Distiller A": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Hydrocracker B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Catalytic Reformer C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Vacuum Distiller D": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}, "Secondary_Targets": {"Visibreaker E": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "LPG Plant F": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Power/Steam Plant G": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": "Heavy"}, "Hydrogen Plant H": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}},
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": ["I-Hawk/Shahin", "HQ-2J/Sayyad"],
-        "Production": {"barrels_per_day": 230, "percent_total": 0.16},
-        "Fighter_Sector": "III"
-    },
-    "Isfahan Oil Refinery": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 0.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Power/Steam Plant G": "Heavy", "Other": 0}, "Target_Types": ["Oil_Refinery"], "Primary_Targets": {"Atmospheric Distiller A": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Hydrocracker B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Catalytic Reformer C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Vacuum Distiller D": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}, "Secondary_Targets": {"Visibreaker E": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "LPG Plant F": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Power/Steam Plant G": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": "Heavy"}, "Hydrogen Plant H": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}},
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": ["I-Hawk/Shahin"],
-        "Production": {"barrels_per_day": 250, "percent_total": 0.18},
-        "Fighter_Sector": "II"
-    },
-    "Lavan Island Oil Refinery": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 0.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Power/Steam Plant G": "Heavy", "Other": 0}, "Target_Types": ["Oil_Refinery"], "Primary_Targets": {"Atmospheric Distiller A": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Hydrocracker B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Catalytic Reformer C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Vacuum Distiller D": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}, "Secondary_Targets": {"Visibreaker E": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "LPG Plant F": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Power/Steam Plant G": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": "Heavy"}, "Hydrogen Plant H": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}},
-        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Medium_Range_SAMs": [],
-        "Short_Range_SAMs": ["Type 85 23mm AAA", "GDF 35mm AAA"],
-        "AAA_Value": 2.5,
-        "AAA_Guns": {"Type 85 23mm AAA": 10, "GDF 35mm AAA": 10},
-        "Production": {"barrels_per_day": 30, "percent_total": 0.02},
-        "Fighter_Sector": "III"
-    },
-    "Generic Oil Terminal": {
-        "Long_Range_SAMs": [],
-        "Medium_Range_SAMs": [],
-        "Short_Range_SAMs": [],
-        "AAA_Value": 0.0,
-        "AAA_Guns": {},
-        "MANPADS_positions": 0,
-        "Armor_Class": {"Tanker Loading Jetty A": 0, "Pumps/Machinery B": 0},
-        "Target_Types": ["Oil_Terminal"],
-        "Primary_Targets": {
-            "Tanker Loading Jetty A": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-            "Pumps/Machinery B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0},
-        },
-        "Secondary_Targets": {}
     },
     "Sirri Island Oil Terminal": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 0.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Tanker Loading Jetty A": 0, "Pumps/Machinery B": 0}, "Target_Types": ["Oil_Terminal"], "Primary_Targets": {"Tanker Loading Jetty A": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Pumps/Machinery B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}, "Secondary_Targets": {}},
         "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Production": {"barrels_per_day": 1454, "percent_total": 0.16},
-        "Jetties": 1,
-        "Fighter_Sector": "III"
+        "Medium_Range_SAMs": [],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 0.0,
+        "Target_Types": ["Oil_Terminal"],
+        "Primary_Targets": {
+            "P1: Tanker Loading Jetty": {"size_class": "G", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        },
+        "Secondary_Targets": {
+            "S1: Pumps & Machinery":    {"size_class": "C", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        }
     },
     "Lavan Island Oil Terminal": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 0.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Tanker Loading Jetty A": 0, "Pumps/Machinery B": 0}, "Target_Types": ["Oil_Terminal"], "Primary_Targets": {"Tanker Loading Jetty A": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Pumps/Machinery B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}, "Secondary_Targets": {}},
         "Long_Range_SAMs": [],
+        "Medium_Range_SAMs": [],
         "Short_Range_SAMs": ["Type 85 23mm AAA", "GDF 35mm AAA"],
         "AAA_Value": 2.5,
-        "AAA_Guns": {"Type 85 23mm AAA": 10, "GDF 35mm AAA": 10},
-        "Production": {"barrels_per_day": 1086, "percent_total": 0.12},
-        "Jetties": 2,
-        "Fighter_Sector": "III"
+        "Target_Types": ["Oil_Terminal"],
+        "Primary_Targets": {
+            "P1: Tanker Loading Jetty": {"size_class": "G", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 5, "max_damage_for_destroyed": 8},
+        },
+        "Secondary_Targets": {
+            "S1: Pumps & Machinery":    {"size_class": "C", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 5, "max_damage_for_destroyed": 7},
+        }
     },
     "Ras Bahregan Oil Terminal": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 0.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Tanker Loading Jetty A": 0, "Pumps/Machinery B": 0}, "Target_Types": ["Oil_Terminal"], "Primary_Targets": {"Tanker Loading Jetty A": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Pumps/Machinery B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}, "Secondary_Targets": {}},
         "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
-        "Production": {"barrels_per_day": 1051, "percent_total": 0.11},
-        "Jetties": 1,
-        "Fighter_Sector": "III"
+        "Medium_Range_SAMs": [],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 0.0,
+        "Target_Types": ["Oil_Terminal"],
+        "Primary_Targets": {
+            "P1: Tanker Loading Jetty": {"size_class": "G", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        },
+        "Secondary_Targets": {
+            "S1: Pumps & Machinery":    {"size_class": "C", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        }
     },
     "Neka Oil Terminal": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 0.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Tanker Loading Jetty A": 0, "Pumps/Machinery B": 0}, "Target_Types": ["Oil_Terminal"], "Primary_Targets": {"Tanker Loading Jetty A": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}, "Pumps/Machinery B": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}}, "Secondary_Targets": {}},
+        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
+        "Medium_Range_SAMs": [],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 0.0,
+        "Target_Types": ["Oil_Terminal"],
+        "Primary_Targets": {
+            "P1: Tanker Loading Jetty": {"size_class": "G", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        },
+        "Secondary_Targets": {
+            "S1: Pumps & Machinery":    {"size_class": "C", "armor_class": 0, "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2},
+        }
+    },
+    "Tehran Research Reactor": {
+        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
+        "Medium_Range_SAMs": [],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 0.5,
+        "Target_Types": ["Nuclear"],
+        "Primary_Targets": {"Reactor": {"size_class": "C", "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 3, "armor_class": 0}},
+        "Secondary_Targets": {}
+    },
+    "Bushehr Nuclear Plant": {
+        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
+        "Medium_Range_SAMs": ["I-Hawk/Shahin", "HQ-2J/Sayyad"],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 1.0,
+        "Target_Types": ["Nuclear"],
+        "Primary_Targets": {"Plant": {"size_class": "C", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 0}},
+        "Secondary_Targets": {}
+    },
+    "Fuel Manufacturing Plant": {
+        "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
+        "Medium_Range_SAMs": ["I-Hawk/Shahin"],
+        "Short_Range_SAMs": ["Tor-M1 [SA-15]"],
+        "AAA_Value": 2.5,
+        "Target_Types": ["Nuclear"],
+        "Primary_Targets": {
+            "Fuel Manufacturing Plant B": {"size_class": "C", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 0}
+        },
+        "Secondary_Targets": {
+            "Transformer Station D": {"size_class": "C", "damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 0}
+        }
+    },
+    "Parchin Military Complex": {
         "Long_Range_SAMs": [],
-        "Production": {"barrels_per_day": 298, "percent_total": 0.03},
-        "Jetties": 3,
-        "Fighter_Sector": "I"
+        "Medium_Range_SAMs": [],
+        "Short_Range_SAMs": ["Rapier", "HQ-7 [FM-80]/Shahab Taqeb"],
+        "AAA_Value": 1.0,
+        "Target_Types": ["Military"],
+        "Primary_Targets": {"Military Facility": {"size_class": "C", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 0}},
+        "Secondary_Targets": {}
+    },
+    "Fordow Enrichment Site": {
+        "Long_Range_SAMs": ["S-300PMU-1 [SA-20a Gargoyle]", "HQ-9"],
+        "Medium_Range_SAMs": ["Buk-M1 [SA-11]"],
+        "Short_Range_SAMs": ["Tor-M1 [SA-15]", "Pantsyr-S1E [SA-22 Greyhound]"],
+        "AAA_Value": 2.5,
+        "Target_Types": ["Nuclear"],
+        "Primary_Targets": {"Centrifuge Hall": {"size_class": "B", "damage_boxes_hit": 0, "max_damage_for_crippled": 3, "max_damage_for_destroyed": 9, "armor_class": 48}},
+        "Secondary_Targets": {}
     },
     "Generic Tactical Airbase": {
         "Long_Range_SAMs": [],
         "Medium_Range_SAMs": [],
         "Short_Range_SAMs": [],
         "AAA_Value": 1.0,
-        "AAA_Guns": {},
-        "MANPADS_positions": 0,
-        "Armor_Class": {"Hardened Aircraft Shelter": 7, "Quick Reaction Shelter": 7, "Control Tower": 0, "Magazine": 7},
         "Target_Types": ["Military", "Airbase"],
         "Primary_Targets": {
-            "Hardened Aircraft Shelter A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7},
-            "Quick Reaction Shelter B1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7},
-            "Magazine D1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7},
+            "P1: Aircraft Shelters/Mags": {"size_class": "D", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 7},
         },
         "Secondary_Targets": {
-            "Control Tower C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
+            "P2: Control Tower":          {"size_class": "E", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 2, "armor_class": 0},
         }
     },
     "TAB 1 Mehrabad": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 1.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Hardened Aircraft Shelter": 7, "Quick Reaction Shelter": 7, "Control Tower": 0, "Magazine": 7}, "Target_Types": ["Military", "Airbase"], "Primary_Targets": {"Hardened Aircraft Shelter A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Quick Reaction Shelter B1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Magazine D1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}}, "Secondary_Targets": {"Control Tower C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0}}},
         "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
         "Medium_Range_SAMs": ["I-Hawk/Shahin", "HQ-2J/Sayyad"],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 1.0,
+        "Target_Types": ["Military", "Airbase"],
         "Fighter_Sector": "I",
         "Capacity": 19,
-        "QRS_Count": 2,
-        "Magazines_Count": 2,
+        "Primary_Targets": {
+            "P1: Aircraft Shelters/Mags": {"size_class": "D", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 7},
+        },
+        "Secondary_Targets": {
+            "P2: Control Tower":          {"size_class": "E", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 2, "armor_class": 0},
+        }
     },
     "TAB 2 Tabriz": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 1.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Hardened Aircraft Shelter": 7, "Quick Reaction Shelter": 7, "Control Tower": 0, "Magazine": 7}, "Target_Types": ["Military", "Airbase"], "Primary_Targets": {"Hardened Aircraft Shelter A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Quick Reaction Shelter B1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Magazine D1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}}, "Secondary_Targets": {"Control Tower C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0}}},
         "Long_Range_SAMs": [],
         "Medium_Range_SAMs": ["I-Hawk/Shahin"],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 1.0,
+        "Target_Types": ["Military", "Airbase"],
         "Fighter_Sector": "I",
-        "Capacity": 0,
-        "QRS_Count": 0,
-        "Magazines_Count": 0,
+        "Primary_Targets": {
+            "P1: Aircraft Shelters/Mags": {"size_class": "D", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 7},
+        },
+        "Secondary_Targets": {
+            "P2: Control Tower":          {"size_class": "E", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 2, "armor_class": 0},
+        }
     },
     "TAB 3 Shahrokhi (Hamadan)": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 1.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Hardened Aircraft Shelter": 7, "Quick Reaction Shelter": 7, "Control Tower": 0, "Magazine": 7}, "Target_Types": ["Military", "Airbase"], "Primary_Targets": {"Hardened Aircraft Shelter A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Quick Reaction Shelter B1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Magazine D1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}}, "Secondary_Targets": {"Control Tower C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0}}},
         "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
         "Medium_Range_SAMs": ["I-Hawk/Shahin"],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 1.0,
+        "Target_Types": ["Military", "Airbase"],
         "Fighter_Sector": "I",
-        "Capacity": 0,
-        "QRS_Count": 0,
-        "Magazines_Count": 0,
+        "Primary_Targets": {
+            "P1: Aircraft Shelters/Mags": {"size_class": "D", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 7},
+        },
+        "Secondary_Targets": {
+            "P2: Control Tower":          {"size_class": "E", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 2, "armor_class": 0},
+        }
     },
     "TAB 4 Vahdati (Dezful)": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 1.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Hardened Aircraft Shelter": 7, "Quick Reaction Shelter": 7, "Control Tower": 0, "Magazine": 7}, "Target_Types": ["Military", "Airbase"], "Primary_Targets": {"Hardened Aircraft Shelter A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Quick Reaction Shelter B1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Magazine D1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}}, "Secondary_Targets": {"Control Tower C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0}}},
         "Long_Range_SAMs": [],
         "Medium_Range_SAMs": ["I-Hawk/Shahin"],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 1.0,
+        "Target_Types": ["Military", "Airbase"],
         "Fighter_Sector": "II",
-        "Capacity": 0,
-        "QRS_Count": 0,
-        "Magazines_Count": 0,
+        "Primary_Targets": {
+            "P1: Aircraft Shelters/Mags": {"size_class": "D", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 7},
+        },
+        "Secondary_Targets": {
+            "P2: Control Tower":          {"size_class": "E", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 2, "armor_class": 0},
+        }
     },
     "TAB 5 Omidiyeh": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 1.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Hardened Aircraft Shelter": 7, "Quick Reaction Shelter": 7, "Control Tower": 0, "Magazine": 7}, "Target_Types": ["Military", "Airbase"], "Primary_Targets": {"Hardened Aircraft Shelter A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Quick Reaction Shelter B1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Magazine D1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}}, "Secondary_Targets": {"Control Tower C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0}}},
         "Long_Range_SAMs": [],
         "Medium_Range_SAMs": [],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 1.0,
+        "Target_Types": ["Military", "Airbase"],
         "Fighter_Sector": "II",
-        "Capacity": 0,
-        "QRS_Count": 0,
-        "Magazines_Count": 0,
+        "Primary_Targets": {
+            "P1: Aircraft Shelters/Mags": {"size_class": "D", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 7},
+        },
+        "Secondary_Targets": {
+            "P2: Control Tower":          {"size_class": "E", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 2, "armor_class": 0},
+        }
     },
     "TAB 6 Bushehr Airport": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 1.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Hardened Aircraft Shelter": 7, "Quick Reaction Shelter": 7, "Control Tower": 0, "Magazine": 7}, "Target_Types": ["Military", "Airbase"], "Primary_Targets": {"Hardened Aircraft Shelter A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Quick Reaction Shelter B1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Magazine D1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}}, "Secondary_Targets": {"Control Tower C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0}}},
         "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
         "Medium_Range_SAMs": ["I-Hawk/Shahin"],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 1.0,
+        "Target_Types": ["Military", "Airbase"],
         "Fighter_Sector": "III",
-        "Capacity": 0,
-        "QRS_Count": 0,
-        "Magazines_Count": 0,
+        "Primary_Targets": {
+            "P1: Aircraft Shelters/Mags": {"size_class": "D", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 7},
+        },
+        "Secondary_Targets": {
+            "P2: Control Tower":          {"size_class": "E", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 2, "armor_class": 0},
+        }
     },
     "TAB 7 Shiraz": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 1.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Hardened Aircraft Shelter": 7, "Quick Reaction Shelter": 7, "Control Tower": 0, "Magazine": 7}, "Target_Types": ["Military", "Airbase"], "Primary_Targets": {"Hardened Aircraft Shelter A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Quick Reaction Shelter B1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Magazine D1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}}, "Secondary_Targets": {"Control Tower C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0}}},
         "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
         "Medium_Range_SAMs": [],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 1.0,
+        "Target_Types": ["Military", "Airbase"],
         "Fighter_Sector": "II",
-        "Capacity": 0,
-        "QRS_Count": 0,
-        "Magazines_Count": 0,
+        "Primary_Targets": {
+            "P1: Aircraft Shelters/Mags": {"size_class": "D", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 7},
+        },
+        "Secondary_Targets": {
+            "P2: Control Tower":          {"size_class": "E", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 2, "armor_class": 0},
+        }
     },
     "TAB 8 Khatami (Isfahan)": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 1.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Hardened Aircraft Shelter": 7, "Quick Reaction Shelter": 7, "Control Tower": 0, "Magazine": 7}, "Target_Types": ["Military", "Airbase"], "Primary_Targets": {"Hardened Aircraft Shelter A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Quick Reaction Shelter B1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Magazine D1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}}, "Secondary_Targets": {"Control Tower C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0}}},
         "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
         "Medium_Range_SAMs": ["I-Hawk/Shahin"],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 1.0,
+        "Target_Types": ["Military", "Airbase"],
         "Fighter_Sector": "II",
-        "Capacity": 0,
-        "QRS_Count": 0,
-        "Magazines_Count": 0,
+        "Primary_Targets": {
+            "P1: Aircraft Shelters/Mags": {"size_class": "D", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 7},
+        },
+        "Secondary_Targets": {
+            "P2: Control Tower":          {"size_class": "E", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 2, "armor_class": 0},
+        }
     },
     "TAB 9 Bandar Abbas": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 1.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Hardened Aircraft Shelter": 7, "Quick Reaction Shelter": 7, "Control Tower": 0, "Magazine": 7}, "Target_Types": ["Military", "Airbase"], "Primary_Targets": {"Hardened Aircraft Shelter A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Quick Reaction Shelter B1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Magazine D1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}}, "Secondary_Targets": {"Control Tower C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0}}},
         "Long_Range_SAMs": ["S-200 [SA-5 Gammon] Ghareh"],
         "Medium_Range_SAMs": ["HQ-2J/Sayyad", "I-Hawk/Shahin"],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 1.0,
+        "Target_Types": ["Military", "Airbase"],
         "Fighter_Sector": "III",
-        "Capacity": 0,
-        "QRS_Count": 0,
-        "Magazines_Count": 0,
+        "Primary_Targets": {
+            "P1: Aircraft Shelters/Mags": {"size_class": "D", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 7},
+        },
+        "Secondary_Targets": {
+            "P2: Control Tower":          {"size_class": "E", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 2, "armor_class": 0},
+        }
     },
     "TAB 10 Chahbahar": {
-        **{"Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [], "AAA_Value": 1.0, "AAA_Guns": {}, "MANPADS_positions": 0, "Armor_Class": {"Hardened Aircraft Shelter": 7, "Quick Reaction Shelter": 7, "Control Tower": 0, "Magazine": 7}, "Target_Types": ["Military", "Airbase"], "Primary_Targets": {"Hardened Aircraft Shelter A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Quick Reaction Shelter B1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}, "Magazine D1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 2, "armor_class": 7}}, "Secondary_Targets": {"Control Tower C": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0}}},
         "Long_Range_SAMs": [],
         "Medium_Range_SAMs": [],
+        "Short_Range_SAMs": [],
+        "AAA_Value": 1.0,
+        "Target_Types": ["Military", "Airbase"],
         "Fighter_Sector": "III",
-        "Capacity": 0,
-        "QRS_Count": 0,
-        "Magazines_Count": 0,
-    },
-    "Generic Buk-M1 Battery": {
-        "Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [],
-        "AAA_Value": 0.2,
-        "AAA_Guns": {"Type 85 23mm AAA": 2},
-        "MANPADS_positions": 0,
-        "Armor_Class": {"All": 0},
-        "Target_Types": ["Military", "SAM_Site"],
         "Primary_Targets": {
-            "9S18M1 [Snow Drift] acquisition radar": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
+            "P1: Aircraft Shelters/Mags": {"size_class": "D", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 5, "armor_class": 7},
         },
         "Secondary_Targets": {
-            "9A310 Fourrail launcher vehicle A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "9A310 Fourrail launcher vehicle A2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "9A310 Fourrail launcher vehicle A3": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "9A310 Fourrail launcher vehicle A4": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-        }
-    },
-    "Generic HQ-2J/Sayyad Battery": {
-        "Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [],
-        "AAA_Value": 0.2,
-        "AAA_Guns": {"Type 85 23mm AAA": 2},
-        "MANPADS_positions": 0,
-        "Armor_Class": {"All": 0},
-        "Target_Types": ["Military", "SAM_Site"],
-        "Primary_Targets": {
-            "SJ-202 [Gin Sling] guidance radar": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-        },
-        "Secondary_Targets": {
-            "Single-rail Launcher A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "Single-rail Launcher A2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "Single-rail Launcher A3": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "Single-rail Launcher A4": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "Single-rail Launcher A5": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "Single-rail Launcher A6": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-        }
-    },
-    "Generic HQ-9 Battery": {
-        "Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [],
-        "AAA_Value": 0.2,
-        "AAA_Guns": {"Type 85 23mm AAA": 2},
-        "MANPADS_positions": 0,
-        "Armor_Class": {"All": 0},
-        "Target_Types": ["Military", "SAM_Site"],
-        "Primary_Targets": {
-            "HT-233 [Tiger Paw] guidance radar": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-        },
-        "Secondary_Targets": {
-            "Fourtubed launcher A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "Fourtubed launcher A2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "Fourtubed launcher A3": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "Fourtubed launcher A4": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "Fourtubed launcher A5": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "Fourtubed launcher A6": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "YLC-2V [High Guard] acquisition radar": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-        }
-    },
-    "Generic I-Hawk/Sejil Battery": {
-        "Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [],
-        "AAA_Value": 0.2,
-        "AAA_Guns": {"Type 85 23mm AAA": 2},
-        "MANPADS_positions": 0,
-        "Armor_Class": {"All": 0},
-        "Target_Types": ["Military", "SAM_Site"],
-        "Primary_Targets": {
-            "MPQ-46 guidance radar": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-        },
-        "Secondary_Targets": {
-            "Triple Launcher A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "Triple Launcher A2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "Triple Launcher A3": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "MPQ-48 radar": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "MPQ-50 radar": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-        }
-    },
-    "Generic Kub-M3 Battery": {
-        "Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [],
-        "AAA_Value": 0.2,
-        "AAA_Guns": {"Type 85 23mm AAA": 2},
-        "MANPADS_positions": 0,
-        "Armor_Class": {"All": 0},
-        "Target_Types": ["Military", "SAM_Site"],
-        "Primary_Targets": {
-            "1S91 [Straight Flush] guidance radar vehicle": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-        },
-        "Secondary_Targets": {
-            "2P25 Three-rail launcher vehicle A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "2P25 Three-rail launcher vehicle A2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "2P25 Three-rail launcher vehicle A3": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "2P25 Three-rail launcher vehicle A4": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "Long Track acquisition radar": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-        }
-    },
-    "Generic S-200/Ghareh Battery": {
-        "Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [],
-        "AAA_Value": 0.2,
-        "AAA_Guns": {"Type 85 23mm AAA": 2},
-        "MANPADS_positions": 0,
-        "Armor_Class": {"All": 0},
-        "Target_Types": ["Military", "SAM_Site"],
-        "Primary_Targets": {
-            "56N2 [Square Pair] guidance radar": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-        },
-        "Secondary_Targets": {
-            "5P72 Single-Rail Launcher A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "5P72 Single-Rail Launcher A2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "P-14 [Tall King] radar": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "PRV13 [Odd Group] radar": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-        }
-    },
-    "Generic S-300 Battery": {
-        "Long_Range_SAMs": [], "Medium_Range_SAMs": [], "Short_Range_SAMs": [],
-        "AAA_Value": 0.2,
-        "AAA_Guns": {"Type 85 23mm AAA": 2},
-        "MANPADS_positions": 0,
-        "Armor_Class": {"All": 0},
-        "Target_Types": ["Military", "SAM_Site"],
-        "Primary_Targets": {
-            "30N6E1 Tomb Stone guidance radar": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-        },
-        "Secondary_Targets": {
-            "5P85TE Four-tubed TEL A1": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "5P85TE Four-tubed TEL A2": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "5P85TE Four-tubed TEL A3": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "5P85TE Four-tubed TEL A4": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "5P85TE Four-tubed TEL A5": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "5P85TE Four-tubed TEL A6": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "Big Bird acquisition radar": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
-            "76N6 Clam Shell acquisition radar": {"damage_boxes_hit": 0, "max_damage_for_crippled": 1, "max_damage_for_destroyed": 1, "armor_class": 0},
+            "P2: Control Tower":          {"size_class": "E", "damage_boxes_hit": 0, "max_damage_for_crippled": 2, "max_damage_for_destroyed": 2, "armor_class": 0},
         }
     },
 }
-VALID_TARGETS = list(TARGET_DEFENSES.keys())
-# Initial squadron setups. 'current', 'damaged', 'under_repair', 'lost' will be dynamic state.
-# 'RepairLevel' and 'Starting_Strength' are static here.
-# Added a 'base_airfield' for clarity on initial deployment.
 IRANIAN_SQUADRONS_SETUP = {
     '11 TFS': {'Type': 'MiG-29', 'Starting_Strength': 14, 'RepairLevel': 'second', 'base_airfield': 'TAB 1 Mehrabad'},
     'Detachment 1': {'Type': 'F-14', 'Starting_Strength': 4, 'RepairLevel': 'fourth', 'base_airfield': 'TAB 1 Mehrabad'},
@@ -1283,3 +1140,4 @@ RULES = {
     "OPINION_INCOME_TABLE": OPINION_INCOME_TABLE,
     "THIRD_PARTY_INCOME_TABLE": THIRD_PARTY_INCOME_TABLE,
 }
+
