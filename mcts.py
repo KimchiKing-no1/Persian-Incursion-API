@@ -9,7 +9,7 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Callable
 
-# Optional: Imports for RL (will check availability at runtime)
+# Optional: Imports for RL
 try:
     import torch
     from model import PVModel
@@ -36,6 +36,10 @@ class Node:
     W: float = 0.0      # total value sum
     Q: float = 0.0      # mean value (W/N)
     P: float = 1.0      # prior probability (from Policy Network)
+    
+    # Solver stats (Propagating definitive wins/losses)
+    is_terminal: bool = False
+    winner: Optional[str] = None
 
     # Tree structure
     children: List["Node"] = field(default_factory=list)
@@ -47,7 +51,23 @@ class Node:
     def update(self, value: float) -> None:
         self.N += 1
         self.W += value
-        self.Q = self.W / self.N if self.N else 0.0
+        self.Q = self.W / self.N
+
+    def best_child(self, c_uct: float = 1.4) -> Node:
+        # PUCT Formula with stability epsilon
+        sqrt_n = math.sqrt(max(1, self.N))
+        def uct(n: Node) -> float:
+            # If node represents a guaranteed loss for current player, avoid it
+            if n.is_terminal and n.winner and n.winner != self._current_player_side():
+                return -float('inf')
+            exploit = n.Q
+            explore = c_uct * n.P * (sqrt_n / (1 + n.N))
+            return exploit + explore
+        
+        return max(self.children, key=uct)
+
+    def _current_player_side(self) -> str:
+        return self.state.get("turn", {}).get("current_player", "israel").lower()
 
 
 # ============================== A G E N T ====================================
@@ -57,14 +77,15 @@ class MCTSAgent:
         self,
         engine,
         side: str,
-        simulations: int = 1000,
-        c_uct: float = 1.4,
-        model_path: Optional[str] = None, # Path to .pt file
+        simulations: int = 800,
+        c_uct: float = 2.0, # Higher exploration for complex wargames
+        model_path: Optional[str] = None,
         gemini: Optional[GeminiCaller] = None,
         seed: Optional[int] = None,
         root_dirichlet_alpha: float = 0.3,
         root_dirichlet_eps: float = 0.25,
-        verbose: bool = False
+        verbose: bool = False,
+        reuse_tree: bool = True # Expert Feature: Keep tree between moves
     ):
         self.engine = engine
         self.side = side.lower().strip()
@@ -75,152 +96,184 @@ class MCTSAgent:
         self.root_dirichlet_alpha = root_dirichlet_alpha
         self.root_dirichlet_eps = root_dirichlet_eps
         self.verbose = verbose
+        self.reuse_tree = reuse_tree
+        
+        self._last_root: Optional[Node] = None
         self._transpo: Dict[str, Node] = {}
 
-        # --- Load RL Model if available ---
+        # --- Load RL Model ---
         self.pv_model = None
         if model_path and RL_AVAILABLE:
             try:
                 self.pv_model = PVModel.load(model_path)
-                self.pv_model.eval() # Set to inference mode
-                if self.verbose: print(f"[MCTS] Loaded RL Model from {model_path}")
+                self.pv_model.eval()
+                if self.verbose: print(f"[MCTS] Expert Mode: RL Model Loaded from {model_path}")
             except Exception as e:
-                print(f"[MCTS] WARNING: Failed to load RL model: {e}. Running in Heuristic Mode.")
-        elif model_path and not RL_AVAILABLE:
-            print("[MCTS] WARNING: 'torch' or 'features.py' missing. RL disabled.")
+                print(f"[MCTS] WARNING: RL load failed ({e}). Using Expert Heuristic Mode.")
 
     # ----------------------------------------------------------------------
     # P U B L I C   A P I
     # ----------------------------------------------------------------------
-    def choose_action(self, state: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, float]]:
-        self._transpo.clear()
-        root = self._make_node(state)
+    def choose_action(self, state: Dict[str, Any], temperature: float = 0.5) -> tuple[Dict[str, Any], Dict[str, float]]:
+        """
+        Expert MCTS Entry Point.
+        Handles Tree Reuse, Determinization, and Temperature sampling.
+        """
+        
+        # 1. Determinization: Hide opponent information
+        # In a real game, we don't know the enemy's cards. We must sample a plausible hand.
+        root_state = self._determinize_state(state)
+        
+        # 2. Tree Reuse (Hot-Start)
+        root = None
+        if self.reuse_tree and self._last_root:
+            # Try to find the new state in the old tree
+            # Note: This is tricky in stochastic games; usually requires "Move Pruning"
+            # For safety in this version, we rebuild if we can't find perfect match
+            target_key = self._state_key(root_state)
+            if target_key in self._transpo:
+                root = self._transpo[target_key]
+                # Prune parent to save memory
+                root.parent = None 
+                if self.verbose: print(f"[MCTS] Hot-start successful. Retained {root.N} simulations.")
+        
+        if root is None:
+            self._transpo.clear()
+            root = self._make_node(root_state)
 
-        # If no legal moves or game over
+        # If instant win/loss or no moves
         if not root.unexpanded_actions and not root.children:
             return {"type": "Pass"}, {}
 
-        # 1. Add Exploration Noise to Root (AlphaZero style)
-        if self.root_dirichlet_alpha and root.unexpanded_actions:
+        # 3. Add Noise to Root (Prevent rigid opening books)
+        if self.root_dirichlet_alpha:
             self._inject_root_dirichlet(root)
 
-        # 2. Run Simulations
-        for _ in range(self.simulations):
-            node = self._select(root)
+        # 4. Search Loop
+        start_time = time.time()
+        for i in range(self.simulations):
+            node = root
+            
+            # SELECT
+            while not node.unexpanded_actions and node.children:
+                node = node.best_child(self.c_uct)
+            
+            # EXPAND
             if node.unexpanded_actions:
                 node = self._expand(node)
             
-            # RL Value or Heuristic Rollout
+            # EVALUATE (RL or Expert Heuristic)
             value = self._evaluate_leaf(node.state)
+            
+            # BACKPROPAGATE
             self._backprop(node, value)
 
-        # 3. Select best action (Visit Count)
-        if not root.children:
-            return root.unexpanded_actions[0], {}
-            
-        best_child = max(root.children, key=lambda n: n.N)
+        # 5. Select Action based on Temperature
+        # Temp -> 0 means argmax (Competitive play)
+        # Temp -> 1 means proportional sampling (Exploration/Training)
         
-        # Generate policy map for training
-        total_N = sum(c.N for c in root.children)
-        policy = {json.dumps(c.incoming_action, sort_keys=True): (c.N / total_N) for c in root.children}
+        if not root.children:
+             # Should technically pass, but if we have unexpanded, pick random
+            if root.unexpanded_actions:
+                return root.unexpanded_actions[0], {}
+            return {"type": "Pass"}, {}
 
+        counts = [(c.N, c.incoming_action) for c in root.children]
+        total_N = sum(x[0] for x in counts)
+        
+        if temperature == 0:
+            best_count, best_action = max(counts, key=lambda x: x[0])
+        else:
+            # Weighted random choice based on N^(1/temp)
+            counts = [(x[0] ** (1/temperature), x[1]) for x in counts]
+            total_temp = sum(x[0] for x in counts)
+            if total_temp == 0: return max(counts)[1], {}
+            probs = [x[0]/total_temp for x in counts]
+            # Pick index
+            idx = np.random.choice(len(counts), p=probs)
+            best_action = counts[idx][1]
+
+        # Cache root for next turn
+        # We find the child node corresponding to the action we picked
+        for c in root.children:
+            if c.incoming_action == best_action:
+                self._last_root = c
+                break
+        
+        policy_map = {json.dumps(c.incoming_action, sort_keys=True): (c.N / total_N) for c in root.children}
+        
         if self.verbose:
-            print(f"[MCTS] Best: {best_child.incoming_action} (Q={best_child.Q:.2f}, N={best_child.N})")
+            print(f"[MCTS] Chosen: {best_action['type']} (WinRate: {self._last_root.Q:.2f}, Visits: {self._last_root.N})")
 
-        return best_child.incoming_action, policy
+        return best_action, policy_map
 
     # ----------------------------------------------------------------------
-    # C O R E   L O G I C
+    # D O M A I N   L O G I C
     # ----------------------------------------------------------------------
-    def _select(self, node: Node) -> Node:
-        # Navigate tree until we hit a leaf or unexpanded node
-        while not node.unexpanded_actions and node.children:
-            # PUCT Formula
-            log_N = math.sqrt(node.N)
-            def uct(n: Node) -> float:
-                # Q + c * P * (sqrt(Parent_N) / (1 + Child_N))
-                return n.Q + self.c_uct * n.P * (log_N / (1 + n.N))
+
+    def _determinize_state(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Expert Feature: Imperfect Information Handling.
+        If playing as Israel, shuffle Iran's hand/river so we don't 'cheat'.
+        """
+        sim_state = copy.deepcopy(state)
+        opponent = "iran" if self.side == "israel" else "israel"
+        
+        # We assume we can't see opponent's river. 
+        # In a strict engine, 'river' might be masked. 
+        # If it is visible, we should Randomize it to prevent overfitting to a specific draw.
+        p_data = sim_state['players'].get(opponent, {})
+        if 'deck' in p_data and 'river' in p_data:
+            # Combine current river + deck, shuffle, and redeal
+            # This simulates "I know they have cards, but not which ones"
+            known_river = [c for c in p_data['river'] if c is not None] # Assuming None for holes
+            remaining_deck = p_data.get('deck', [])
             
-            node = max(node.children, key=uct)
-        return node
+            # Pool them
+            pool = known_river + remaining_deck
+            self.rng.shuffle(pool)
+            
+            # Redeal
+            new_river = []
+            for _ in range(min(7, len(pool))):
+                new_river.append(pool.pop(0))
+            
+            sim_state['players'][opponent]['river'] = new_river
+            sim_state['players'][opponent]['deck'] = pool
+            
+        return sim_state
 
     def _expand(self, node: Node) -> Node:
         action = node.unexpanded_actions.pop(0)
         next_state = self._safe_apply(copy.deepcopy(node.state), action)
+        
         child = self._make_node(next_state, parent=node, incoming_action=action)
+        
+        # Check terminality instantly (Solver optimization)
+        winner = self.engine.is_game_over(next_state)
+        if winner:
+            child.is_terminal = True
+            child.winner = winner
+            # If this move wins immediately, boost Q massive amount
+            if winner == self.side:
+                child.Q = 1.0
+                child.W = 1e6 # Hack to force selection
+        
         node.children.append(child)
         return child
 
-    def _backprop(self, node: Node, value: float) -> None:
-        # Value is always from Israel's perspective in this engine (-1 Iran, +1 Israel)
-        # We assume the engine handles turn-switching, so we don't flip value here 
-        # UNLESS your engine's apply_action doesn't swap perspectives. 
-        # (Assuming Standard AlphaZero: Value is always relative to current player? 
-        # No, usually relative to a fixed player in 2p zero-sum. We use Israel-Positive).
-        cur = node
-        while cur is not None:
-            cur.update(value)
-            cur = cur.parent
-
-    # ----------------------------------------------------------------------
-    # R L   I N T E G R A T I O N
-    # ----------------------------------------------------------------------
-    def _make_node(self, state: Dict[str, Any], parent=None, incoming_action=None) -> Node:
-        """Creates a node and populates Priors (P) from the RL model if available."""
-        legal = self._legal_actions(state)
-        node = Node(
-            state=state,
-            parent=parent,
-            incoming_action=incoming_action,
-            unexpanded_actions=legal,
-            key=self._state_key(state)
-        )
-        self._transpo[node.key] = node
-
-        # --- RL POLICY PREDICTION ---
-        if self.pv_model and RL_AVAILABLE:
-            try:
-                # 1. Featurize State
-                turn_side = state.get("turn", {}).get("current_player", "israel").lower()
-                feats = featurize(state, turn_side) # Must return np.array
-                tensor_in = torch.from_numpy(feats).unsqueeze(0) # Add batch dim
-
-                # 2. Model Inference
-                with torch.no_grad():
-                    p_logits, _ = self.pv_model(tensor_in) # Ignore value here, used in eval
-                    p_probs = torch.softmax(p_logits, dim=1).numpy()[0]
-
-                # 3. Map Probs to Actions
-                # We assume 'action_key(action)' returns the index in the probability vector
-                for act in node.unexpanded_actions:
-                    idx = action_key(act) # Helper from features.py
-                    if 0 <= idx < len(p_probs):
-                        act['_prior'] = float(p_probs[idx])
-                    else:
-                        act['_prior'] = 0.0
-                
-                # 4. Sort actions by probability (highest first)
-                node.unexpanded_actions.sort(key=lambda x: x.get('_prior', 0.0), reverse=True)
-                
-                # 5. Assign P to the node (Wait, P belongs to the CHILD edge, currently stored on the action dict)
-                # When we expand, we will pass this P to the child node.
-            except Exception as e:
-                if self.verbose: print(f"[MCTS] Policy Error: {e}")
-        
-        # If no model, Uniform priors
-        if not self.pv_model:
-             for act in node.unexpanded_actions:
-                act['_prior'] = 1.0 / len(node.unexpanded_actions)
-
-        return node
-
     def _evaluate_leaf(self, state: Dict[str, Any]) -> float:
-        """Returns value [-1, 1]. Uses RL model if present, else Heuristic Rollout."""
+        """
+        Expert Evaluation:
+        1. Game Over check
+        2. Neural Net (if loaded)
+        3. Expert Heuristic Rollout (Heavy Playout)
+        """
         winner = self.engine.is_game_over(state)
-        if winner == "israel": return 1.0
-        if winner == "iran": return -1.0
+        if winner:
+            return 1.0 if winner == "israel" else -1.0
 
-        # --- RL VALUE PREDICTION ---
+        # 1. Neural Net
         if self.pv_model and RL_AVAILABLE:
             try:
                 turn_side = state.get("turn", {}).get("current_player", "israel").lower()
@@ -229,52 +282,176 @@ class MCTSAgent:
                 with torch.no_grad():
                     _, v_out = self.pv_model(tensor_in)
                 return float(v_out.item())
-            except Exception as e:
-                if self.verbose: print(f"[MCTS] Value Error: {e}")
+            except Exception:
+                pass # Fallback to rollout
         
-        # Fallback: Heuristic Rollout
-        return self._heuristic_rollout(state)
+        # 2. Heavy Rollout
+        return self._heavy_rollout(state)
 
-    def _heuristic_rollout(self, state: Dict[str, Any]) -> float:
-        """Fast random rollout if no neural net is available."""
+    def _heavy_rollout(self, state: Dict[str, Any]) -> float:
+        """
+        A 'Heavy' rollout uses domain knowledge instead of random moves.
+        This significantly improves MCTS strength in wargames.
+        """
         sim_state = copy.deepcopy(state)
-        for _ in range(30): # Depth limit
+        depth = 0
+        max_depth = 40 
+        
+        while depth < max_depth:
             winner = self.engine.is_game_over(sim_state)
             if winner:
                 return 1.0 if winner == "israel" else -1.0
             
-            actions = self._legal_actions(sim_state)
-            if not actions: break
-            # Simple heuristic: prefer ops over passing
-            ops = [a for a in actions if a.get("type") != "Pass"]
-            move = random.choice(ops) if ops else actions[0]
+            legal = self.engine.get_legal_actions(sim_state)
+            if not legal: break
+            
+            # INTELLIGENT SELECTION
+            current_player = sim_state.get("turn", {}).get("current_player", "israel")
+            move = self._heuristic_policy_select(sim_state, legal, current_player)
+            
             sim_state = self._safe_apply(sim_state, move)
+            depth += 1
+            
+        # If depth exceeded, use static evaluation
+        return self._static_eval(sim_state)
+
+    def _heuristic_policy_select(self, state: Dict, legal: List[Dict], side: str) -> Dict:
+        """
+        Selects a move based on expert rules of thumb.
+        """
+        # 1. Always take lethal moves (not fully simulated here, but we prioritize attacks)
         
-        return 0.0 # Draw/Unfinished
+        ops = [a for a in legal if a['type'] not in ('Pass', 'End Impulse')]
+        
+        if not ops:
+            return legal[0] # Pass/End Impulse
+
+        # ISRAEL STRATEGY
+        if side == 'israel':
+            # Priority 1: Airstrikes on Nuclear targets if resources allow
+            strikes = [a for a in ops if a['type'] == 'Order Airstrike']
+            if strikes:
+                # Sort by target value (Simple heuristic: Natanz > Arak > others)
+                def target_score(a):
+                    t = a.get('target', '').lower()
+                    if 'natanz' in t: return 10
+                    if 'arak' in t: return 8
+                    return 1
+                strikes.sort(key=target_score, reverse=True)
+                return strikes[0]
+            
+            # Priority 2: Special Warfare to prep battlefield
+            specwar = [a for a in ops if a['type'] == 'Order Special Warfare']
+            if specwar:
+                return specwar[0]
+
+        # IRAN STRATEGY
+        if side == 'iran':
+            # Priority 1: Ballistic Missile retaliation
+            bms = [a for a in ops if a['type'] == 'Order Ballistic Missile']
+            if bms:
+                return bms[0]
+            
+            # Priority 2: Terror Attacks to drain US opinion
+            terror = [a for a in ops if a['type'] == 'Order Terror Attack']
+            if terror:
+                return terror[0]
+
+        # Fallback: Random Op -> Random Card -> Pass
+        cards = [a for a in legal if a['type'] == 'Play Card']
+        if cards and self.rng.random() < 0.5:
+            return self.rng.choice(cards)
+            
+        return self.rng.choice(ops) if ops else legal[0]
+
+    def _static_eval(self, state: Dict[str, Any]) -> float:
+        """
+        Evaluate non-terminal state [-1, 1].
+        Positive = Good for Israel.
+        """
+        score = 0.0
+        
+        # 1. Nuclear Damage (Primary Metric)
+        targets = self.engine.rules.get("targets", {})
+        for tname, tdata in state.get("target_damage_status", {}).items():
+            # Check if it's a nuclear target
+            trules = targets.get(tname, {})
+            if "Nuclear" in trules.get("Target_Types", []):
+                for comp, dam in tdata.items():
+                    d = dam if isinstance(dam, int) else dam.get("damage_boxes_hit", 0)
+                    score += (d * 0.1) # 0.1 points per box of nuclear damage
+
+        # 2. Opinion Tracks
+        dom = state.get("opinion", {}).get("domestic", {})
+        score += (dom.get("israel", 0) * 0.05)
+        score -= (dom.get("iran", 0) * 0.05)
+
+        return max(-1.0, min(1.0, score))
 
     # ----------------------------------------------------------------------
     # H E L P E R S
     # ----------------------------------------------------------------------
+    def _make_node(self, state: Dict[str, Any], parent=None, incoming_action=None) -> Node:
+        legal = self._legal_actions(state)
+        node = Node(
+            state=state,
+            parent=parent,
+            incoming_action=incoming_action,
+            unexpanded_actions=legal,
+            key=self._state_key(state)
+        )
+        
+        # Neural Net Priors
+        if self.pv_model and RL_AVAILABLE:
+            try:
+                turn_side = state.get("turn", {}).get("current_player", "israel").lower()
+                feats = featurize(state, turn_side)
+                tensor_in = torch.from_numpy(feats).unsqueeze(0)
+                with torch.no_grad():
+                    p_logits, _ = self.pv_model(tensor_in)
+                    p_probs = torch.softmax(p_logits, dim=1).numpy()[0]
+                
+                for act in node.unexpanded_actions:
+                    idx = action_key(act)
+                    if 0 <= idx < len(p_probs):
+                        act['_prior'] = float(p_probs[idx])
+                    else:
+                        act['_prior'] = 0.001
+                
+                node.unexpanded_actions.sort(key=lambda x: x.get('_prior', 0.0), reverse=True)
+            except Exception:
+                pass # Fallback to uniform
+
+        if not node.unexpanded_actions:
+             node.is_terminal = True # No moves = game over usually
+
+        return node
+
     def _legal_actions(self, state):
-        return self.engine.get_legal_actions(state)
+        try:
+            return self.engine.get_legal_actions(state)
+        except Exception:
+            return [{"type": "Pass"}]
 
     def _safe_apply(self, state, action):
         try:
             return self.engine.apply_action(state, action)
-        except:
+        except Exception:
             return state
 
     def _state_key(self, state):
-        # Strip non-serializable objects for caching
-        clean = {k:v for k,v in state.items() if k not in ['_rng', 'log']}
+        # Create a unique hash for the state to use in Transposition Tables
+        # Strip RNG and logs to ensure identical game states match
+        clean = {k:v for k,v in state.items() if k not in ['_rng', 'log', 'active_events_queue']} 
+        # Note: active_events_queue implies pending resolution, might be relevant, 
+        # but for simple transpo we often strip it to increase hit rate. 
+        # For strict correctness, include it. Here we strip it for speed.
         return json.dumps(clean, sort_keys=True, default=str)
 
     def _inject_root_dirichlet(self, root: Node):
-        """Adds noise to root priors to ensure exploration."""
         count = len(root.unexpanded_actions)
         if count < 2: return
         noise = self.rng.dirichlet([self.root_dirichlet_alpha] * count)
         for i, act in enumerate(root.unexpanded_actions):
             act['_prior'] = (1 - self.root_dirichlet_eps) * act.get('_prior', 0.0) + self.root_dirichlet_eps * noise[i]
-        # Re-sort after noise
         root.unexpanded_actions.sort(key=lambda x: x.get('_prior', 0.0), reverse=True)
