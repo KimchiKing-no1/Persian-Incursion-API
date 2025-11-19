@@ -968,9 +968,6 @@ def terms():
     <p>This API is for research and entertainment. Use at your own risk.</p>
     """)
 
-
-
-@app.post("/plan/execute")
 @app.post("/plan/execute")
 def plan_execute(req: NoncedPlan):
     """
@@ -1142,6 +1139,7 @@ def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
     if limit and len(steps) > limit:
         steps = steps[-limit:]
     return {"game_id": game_id, "steps": steps}
+
 
 
 
