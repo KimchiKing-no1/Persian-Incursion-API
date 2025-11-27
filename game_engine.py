@@ -610,7 +610,42 @@ class GameEngine(OpsLoggingMixin):
                             })
                         break
 
-        # ... Add other ops (SW, BM, Terror) similarly ...
+        if side == "israel":
+        # existing Airstrike block ...
+    
+        # Special Warfare
+        swc = self.action_costs.get("special_warfare", {"mp": 1, "ip": 1})
+        if res.get("mp",0) >= swc.get("mp",1) and res.get("ip",0) >= swc.get("ip",1):
+            for t in targets[:4]:
+                actions.append({
+                    "type": "Order Special Warfare",
+                    "target": t,
+                    "mp_cost": swc.get("mp",1),
+                    "ip_cost": swc.get("ip",1),
+                })
+    
+    if side == "iran":
+        # Ballistic Missile
+        bmc = self.action_costs.get("ballistic_missile", {"mp": 1, "ip": 1})
+        if res.get("mp",0) >= bmc.get("mp",1) and res.get("ip",0) >= bmc.get("ip",1):
+            for t in targets[:4]:
+                actions.append({
+                    "type": "Order Ballistic Missile",
+                    "target": t,
+                    "battalions": 1,
+                    "missile_type": "Shahab-3",
+                })
+    
+        # Terror Attack
+        tc = self.action_costs.get("terror_attack", {"mp": 1, "ip": 1})
+        if res.get("mp",0) >= tc.get("mp",1) and res.get("ip",0) >= tc.get("ip",1):
+            actions.append({
+                "type": "Order Terror Attack",
+                "target": "Israel",
+                "mp_cost": tc.get("mp",1),
+                "ip_cost": tc.get("ip",1),
+            })
+
         
         # Filter for Impulse limit
         side_now = state.get('turn', {}).get('current_player', side)
