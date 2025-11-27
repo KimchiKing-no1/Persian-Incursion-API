@@ -436,8 +436,13 @@ class MCTSAgent:
     def _safe_apply(self, state, action):
         try:
             return self.engine.apply_action(state, action)
-        except Exception:
-            return state
+        except Exception as e:
+            # Debug/development mode: fail loud
+            raise
+            # Or at minimum:
+            # print(f"[MCTS] ERROR in apply_action({action}): {e}")
+            # return state
+
 
     def _state_key(self, state):
         # Create a unique hash for the state to use in Transposition Tables
