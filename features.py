@@ -6,7 +6,8 @@ import json
 INPUT_SIZE = 200 
 # Max number of unique actions (for One-Hot encoding)
 ACTION_SPACE_SIZE = 500 
-
+_ACTION_TO_INDEX = {}
+_INDEX_TO_ACTION = []
 def featurize(state: dict, perspective: str) -> np.ndarray:
     """
     Convert game state dict to a fixed-size float32 numpy array.
@@ -36,9 +37,27 @@ def featurize(state: dict, perspective: str) -> np.ndarray:
 def action_key(action: dict) -> int:
     """
     Map a specific JSON action to a unique integer index [0..ACTION_SPACE_SIZE).
-    This allows the Neural Net to output a probability distribution.
+
+    - 같은 action(JSON 문자열)이면 항상 같은 index
+    - 다른 action은 다른 index
+    - ACTION_SPACE_SIZE를 넘으면 RuntimeError (학습 때 upper bound 체크용)
     """
-    # Simple hash-based bucketing for example (Collision prone but works for testing)
-    # In production, you need a precise lookup table of all valid moves.
     s = json.dumps(action, sort_keys=True)
-    return abs(hash(s)) % ACTION_SPACE_SIZE
+
+    # 이미 본 행동이면 기존 index 재사용
+    idx = _ACTION_TO_INDEX.get(s)
+    if idx is not None:
+        return idx
+
+    # 새 행동인데 슬롯 다 찼으면 에러
+    if len(_ACTION_TO_INDEX) >= ACTION_SPACE_SIZE:
+        raise RuntimeError(
+            f"Exceeded ACTION_SPACE_SIZE={ACTION_SPACE_SIZE}. "
+            f"Need to increase ACTION_SPACE_SIZE or predefine action mapping."
+        )
+
+    # 새 index 할당
+    idx = len(_ACTION_TO_INDEX)
+    _ACTION_TO_INDEX[s] = idx
+    _INDEX_TO_ACTION.append(s)
+    return idx
