@@ -144,7 +144,7 @@ class GameEngine(OpsLoggingMixin):
             self._log(state, f"{side} gained from opinions: +{add[0]}PP, +{add[1]}IP, +{add[2]}MP")
 
     # --------------------------- CARDS & RIVER LOGIC ---------------------------
-        def _apply_play_card(self, state, side: str, card_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+    def _apply_play_card(self, state, side: str, card_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
         """
         Core logic for playing a card:
           - check cost from rules
@@ -202,7 +202,7 @@ class GameEngine(OpsLoggingMixin):
 
         # 기본: 카드 플레이 후 상대 차례로 넘김 (Pass와 다르게 consecutive_passes는 리셋)
         turn["consecutive_passes"] = 0
-        return self._advance_turn(state)
+        return self._advance_turn(state)    
 
     def _card_struct(self, side: str, cid: int):
         return self.rules.get("cards_structured", {}).get(
@@ -611,8 +611,7 @@ class GameEngine(OpsLoggingMixin):
                         break
 
        
-        if side == "israel":
-            # existing Airstrike block ...
+      
         
             # Special Warfare
             swc = self.action_costs.get("special_warfare", {"mp": 1, "ip": 1})
@@ -656,7 +655,7 @@ class GameEngine(OpsLoggingMixin):
         actions.append({"type": "End Impulse"})
         return actions
 
-        def apply_action(self, state: Dict[str, Any], action: Dict[str, Any], side: Optional[str] = None) -> Dict[str, Any]:
+    def apply_action(self, state: Dict[str, Any], action: Dict[str, Any], side: Optional[str] = None) -> Dict[str, Any]:
             """
             Single-step state transition for one high-level action.
             This is what MCTS/RL should call.
@@ -721,7 +720,7 @@ class GameEngine(OpsLoggingMixin):
             self._log(s, f"[WARN] Unknown action type {a_type}; treating as Pass.")
             turn["consecutive_passes"] = int(turn.get("consecutive_passes", 0)) + 1
             return self._advance_turn(s)
-
+    
     # -------------------------- TURN MGMT --------------------------------------
     def _advance_turn(self, state):
         turn = state.setdefault('turn', {})
@@ -757,7 +756,7 @@ class GameEngine(OpsLoggingMixin):
         self._reset_impulse_flags(state)
         return state
 
-        def _resolve_play_card_keep_impulse(self, state, action):
+    def _resolve_play_card_keep_impulse(self, state, action):
         
             side = state.get("turn", {}).get("current_player", "israel")
             
