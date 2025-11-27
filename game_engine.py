@@ -561,27 +561,38 @@ class GameEngine(OpsLoggingMixin):
         actions.append({"type": "End Impulse"})
         return actions
 
-    def apply_action(self, state, action):
-        # Same dispatcher logic as before, but now internal methods are safely in the class
-        t = action.get("type")
-        if t == "Pass":
-            state.setdefault("turn",{})["consecutive_passes"] = state.get("turn",{}).get("consecutive_passes",0) + 1
-            return self._advance_turn(state)
+    def apply_actions(self, state: Dict[str, Any], actions: List[Dict[str, Any]], side: Optional[str] = None):
+        """Apply a sequence of actions, returning the new state and accumulated log."""
+        if not isinstance(state, dict):
+            raise ValueError("state must be a dict")
+        if not isinstance(actions, list):
+            raise ValueError("actions must be a list of dicts")
+
+        working = copy.deepcopy(state)
+        turn = working.setdefault("turn", {})
+        if side:
+            turn["current_player"] = side
+
+        working.setdefault("log", [])
+        start_log_idx = len(working["log"])
         
-        if t == "End Impulse":
-            state.setdefault("turn",{})["consecutive_passes"] = state.get("turn",{}).get("consecutive_passes",0) + 1
-            return self._advance_turn(state)
+        for idx, action in enumerate(actions):
+            if not isinstance(action, dict):
+                continue
+            try:
+                # Call the singular method for each action
+                updated = self.apply_action(working, action)
+            except Exception as exc:
+                raise ValueError(f"apply_actions[{idx}] failed for {action}: {exc}") from exc
+            if isinstance(updated, dict):
+                working = updated
 
-        if t == "Play Card":
-            # ... logic for card play ...
-            # Placeholder for full implementation shown in previous snippets
-            return self._resolve_play_card_keep_impulse(state, action)
-            
-        if t == "Order Airstrike":
-            return self._resolve_order_airstrike(state, action, do_advance=False)
+        # Extract just the new log entries
+        new_entries = []
+        if isinstance(working.get("log"), list):
+            new_entries = [str(entry) for entry in working["log"][start_log_idx:]]
 
-        return state
-
+        return working, new_entries
     # -------------------------- TURN MGMT --------------------------------------
     def _advance_turn(self, state):
         turn = state.setdefault('turn', {})
