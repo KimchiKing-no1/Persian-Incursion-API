@@ -1,4 +1,29 @@
 # mcts.py
+class MCTSAgent:
+    def __init__(
+        self,
+        engine,
+        side: str,
+        simulations: int = 800,
+        c_uct: float = 2.0,
+        model_path: Optional[str] = None,
+        gemini: Optional[GeminiCaller] = None,
+        seed: Optional[int] = None,
+        root_dirichlet_alpha: float = 0.3,
+        root_dirichlet_eps: float = 0.25,
+        verbose: bool = False,
+        reuse_tree: bool = True,
+        strict: bool = False,   # ← 추가
+    ):
+        self.engine = engine
+        self.side = side.lower()
+        self.simulations = simulations
+        self.c_uct = c_uct
+        ...
+        self.verbose = verbose
+        self.reuse_tree = reuse_tree
+        self.strict = strict     # ← 추가
+
 from __future__ import annotations
 import math
 import copy
@@ -445,12 +470,36 @@ class MCTSAgent:
 
 
     def _state_key(self, state):
-        # Create a unique hash for the state to use in Transposition Tables
-        # Strip RNG and logs to ensure identical game states match
-        clean = {k:v for k,v in state.items() if k not in ['_rng', 'log', 'active_events_queue']} 
-        # Note: active_events_queue implies pending resolution, might be relevant, 
-        # but for simple transpo we often strip it to increase hit rate. 
-        # For strict correctness, include it. Here we strip it for speed.
+        """
+        Create a unique hash for the state to use in Transposition Tables.
+
+        - Strip RNG + logs (비결정적 / 디버그용)
+        - active_events_queue 는 '정규화(canonicalize)' 해서 포함
+          → 같은 이벤트 세트면 순서 달라도 동일 key
+        """
+        def _canon_event(ev: Any) -> Any:
+            if not isinstance(ev, dict):
+                return ev
+            # 불필요한 로그용 필드 있으면 여기서 빼도 됨
+            return {k: ev[k] for k in sorted(ev.keys())}
+
+        clean = {}
+        for k, v in state.items():
+            if k in ("_rng", "log"):
+                continue
+            if k == "active_events_queue":
+                if isinstance(v, list):
+                    canon_list = [_canon_event(e) for e in v]
+                    canon_list = sorted(
+                        canon_list,
+                        key=lambda e: json.dumps(e, sort_keys=True, default=str)
+                    )
+                    clean[k] = canon_list
+                else:
+                    clean[k] = v
+            else:
+                clean[k] = v
+
         return json.dumps(clean, sort_keys=True, default=str)
 
     def _inject_root_dirichlet(self, root: Node):
@@ -460,3 +509,24 @@ class MCTSAgent:
         for i, act in enumerate(root.unexpanded_actions):
             act['_prior'] = (1 - self.root_dirichlet_eps) * act.get('_prior', 0.0) + self.root_dirichlet_eps * noise[i]
         root.unexpanded_actions.sort(key=lambda x: x.get('_prior', 0.0), reverse=True)
+   
+    def _legal_actions(self, state):
+        try:
+            return self.engine.get_legal_actions(state)
+        except Exception as e:
+            if self.strict:
+                # 디버그 모드: 조용히 죽지 말고 바로 터뜨리기
+                raise
+            if self.verbose:
+                print(f"[MCTS] WARNING: get_legal_actions failed, falling back to Pass. Error: {e}")
+            return [{"type": "Pass"}]
+   
+    def _safe_apply(self, state, action):
+        try:
+            return self.engine.apply_action(state, action)
+        except Exception as e:
+            if self.strict:
+                raise
+            if self.verbose:
+                print(f"[MCTS] WARNING: apply_action failed, returning unchanged state. Error: {e}")
+            return state
