@@ -975,29 +975,200 @@ class GameEngine(OpsLoggingMixin):
         return state.get("opinion", {}).get("domestic", {}).get(side, 0)
 
     def is_game_over(self, state) -> Optional[str]:
-        # Political Victory Conditions
-        if self._domestic(state, "iran") >= 10:
+        """
+        Determine if the game is over and who has won.
+        Considers:
+          - Political victory (domestic opinion thresholds)
+          - Nuclear / Oil strategy flags computed in _check_alt_victory_flags
+          - Turn limit
+        """
+        # 1) 먼저 현재 피해 상태를 기반으로 victory_flags 갱신
+        self._check_alt_victory_flags(state)
+
+        # 2) 정치 승리: RULES["victory_thresholds"]["political"] 있으면 사용, 없으면 ±10 기본값
+        vth = self.victory_thresholds or {}
+        polit = vth.get("political", {})
+        iran_dom_for_israel = int(polit.get("iran_domestic_for_israel_win", 10))
+        israel_dom_for_iran = int(polit.get("israel_domestic_for_iran_win", -10))
+
+        if self._domestic(state, "iran") >= iran_dom_for_israel:
             return "israel"
-        if self._domestic(state, "israel") <= -10:
+        if self._domestic(state, "israel") <= israel_dom_for_iran:
             return "iran"
 
-        v = state.get("victory_flags", {})
-        if v.get("israel_nuclear_strategy_success"):
+        # 3) 전략 승리 플래그 (핵 / 정유)
+        vflags = state.get("victory_flags", {})
+        if vflags.get("israel_nuclear_strategy_success"):
             return "israel"
-        if v.get("israel_oil_strategy_success"):
+        if vflags.get("israel_oil_strategy_success"):
             return "israel"
 
-        # Turn Limit check
+        # 4) 턴 제한
         cur_turn = state.get("turn", {}).get("turn_number", 1)
         scenario = (state.get("rules", {}) or {}).get("scenario")
         default_cap = 42 if str(scenario).lower() == "real_world" else 21
         max_turns = int(self.rules.get("max_turns", default_cap))
-        
+
         if cur_turn > max_turns:
+            # 시간 초과 시 시나리오 기본으로 이란 승리로 처리 (룰북 감각 유지)
             return "iran"
 
         return None
+
     
     def _check_alt_victory_flags(self, state):
-        # Placeholder for complex victory checks (e.g., calculating Oil damage %)
-        pass
+        """
+        Compute alternative victory conditions from current target damage:
+          - refinery_output_pct (global oil production proxy)
+          - natanz_destroyed (nuclear key site)
+        And set:
+          - victory_flags["refinery_output_pct"]
+          - victory_flags["natanz_destroyed"]
+          - victory_flags["israel_oil_strategy_success"]
+          - victory_flags["israel_nuclear_strategy_success"]
+        """
+        vf = state.setdefault("victory_flags", {})
+
+        targets_def = self.rules.get("targets", {})
+        damage_status = state.get("target_damage_status", {})
+
+        # -------------------------
+        # 1) 헬퍼: 컴포넌트 파괴 여부 계산
+        # -------------------------
+        def comp_destroyed(comp_def: Dict[str, Any], dmg_entry: Any) -> bool:
+            """
+            comp_def: rules 블롭의 Primary/Secondary entry
+            dmg_entry: state["target_damage_status"][site][comp] 의 값
+            """
+            if dmg_entry is None:
+                return False
+
+            if isinstance(dmg_entry, dict):
+                dmg = int(dmg_entry.get("damage_boxes_hit", 0))
+            else:
+                dmg = int(dmg_entry)
+
+            max_d = comp_def.get("max_damage_for_destroyed")
+            max_c = comp_def.get("max_damage_for_crippled")
+
+            # 룰 데이터에 Destroyed 기준이 있으면 그걸 우선 사용
+            if max_d is not None:
+                try:
+                    return dmg >= int(max_d)
+                except Exception:
+                    return dmg >= 1
+
+            # Destroyed 기준이 없고 Crippled만 있으면, 일단 그 이상이면 '실질적 파괴'로 취급
+            if max_c is not None:
+                try:
+                    return dmg >= int(max_c)
+                except Exception:
+                    return dmg >= 1
+
+            # 최소 1칸이라도 맞으면 '파괴'로 취급 (보수적)
+            return dmg >= 1
+
+        # -------------------------
+        # 2) 사이트별 Primary/Secondary 파괴율 계산
+        # -------------------------
+        def site_status(site_name: str):
+            tdef = targets_def.get(site_name) or {}
+            prim = tdef.get("Primary_Targets", {}) or {}
+            sec  = tdef.get("Secondary_Targets", {}) or {}
+
+            dsite = damage_status.get(site_name, {}) or {}
+
+            def count_destroyed(comp_dict):
+                total = len(comp_dict)
+                if total == 0:
+                    return 0, 0
+                destroyed = 0
+                for cname, cdef in comp_dict.items():
+                    dentry = dsite.get(cname)
+                    if comp_destroyed(cdef, dentry):
+                        destroyed += 1
+                return destroyed, total
+
+            d_prim, n_prim = count_destroyed(prim)
+            d_sec,  n_sec  = count_destroyed(sec)
+
+            tactical = (n_prim > 0 and d_prim == n_prim)
+            decisive = tactical and (n_sec == 0 or d_sec == n_sec)
+
+            return {
+                "prim_destroyed": d_prim,
+                "prim_total": n_prim,
+                "sec_destroyed": d_sec,
+                "sec_total": n_sec,
+                "tactical": tactical,
+                "decisive": decisive,
+            }
+
+        # -------------------------
+        # 3) 정유시설 파괴율(refinery_output_pct)
+        # -------------------------
+        total_oil_prim = 0
+        destroyed_oil_prim = 0
+
+        for name, tdef in targets_def.items():
+            types = tdef.get("Target_Types", []) or []
+            # Oil 관련 타겟만 선택
+            if any("oil" in str(tp).lower() for tp in types):
+                st = site_status(name)
+                total_oil_prim += st["prim_total"]
+                destroyed_oil_prim += st["prim_destroyed"]
+
+        if total_oil_prim <= 0:
+            refinery_output_pct = 100.0
+        else:
+            # 아주 단순화: Primary 타겟 1개 = 정유 생산의 1/N 로 보고 비례 계산
+            frac_destroyed = destroyed_oil_prim / float(total_oil_prim)
+            refinery_output_pct = max(0.0, 100.0 * (1.0 - frac_destroyed))
+
+        vf["refinery_output_pct"] = refinery_output_pct
+
+        # -------------------------
+        # 4) Natanz 파괴 여부 (핵 전략 성공)
+        # -------------------------
+        natanz_name = None
+        for name in targets_def.keys():
+            if "natanz" in name.lower():
+                natanz_name = name
+                break
+
+        natanz_decisive = False
+        if natanz_name:
+            st_natanz = site_status(natanz_name)
+            natanz_decisive = st_natanz["decisive"]
+
+        vf["natanz_destroyed"] = bool(natanz_decisive)
+
+        # -------------------------
+        # 5) RULES["victory_thresholds"] 를 이용한 전략 승리 판정
+        # -------------------------
+        vth = self.victory_thresholds or {}
+
+        # 예시: rules_blob 에서는
+        # VICTORY_THRESHOLDS = {
+        #   "tactical": {"refinery_output_pct": 60, "natanz_destroyed": False},
+        #   "decisive": {"refinery_output_pct": 40, "natanz_destroyed": True}
+        # }
+        tactical = vth.get("tactical", {})
+        decisive = vth.get("decisive", {})
+
+        tact_oil_thr = float(tactical.get("refinery_output_pct", 60.0))
+        deci_oil_thr = float(decisive.get("refinery_output_pct", 40.0))
+
+        # Oil 전략: 정유 생산이 결정적 기준 이하로 떨어지면 전략 성공으로 간주
+        # (tactical / decisive 둘 다 표시하되, 게임 종료는 decisive 기준을 main 으로 사용)
+        vf["israel_oil_tactical_success"] = refinery_output_pct <= tact_oil_thr
+        vf["israel_oil_decisive_success"] = refinery_output_pct <= deci_oil_thr
+
+        if vf["israel_oil_decisive_success"]:
+            vf["israel_oil_strategy_success"] = True
+        else:
+            vf.setdefault("israel_oil_strategy_success", False)
+
+        # Nuclear 전략: Natanz가 완전 파괴(decisive)면 성공
+        vf["israel_nuclear_strategy_success"] = bool(natanz_decisive)
+
