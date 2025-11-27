@@ -1,29 +1,3 @@
-# mcts.py
-class MCTSAgent:
-    def __init__(
-        self,
-        engine,
-        side: str,
-        simulations: int = 800,
-        c_uct: float = 2.0,
-        model_path: Optional[str] = None,
-        gemini: Optional[GeminiCaller] = None,
-        seed: Optional[int] = None,
-        root_dirichlet_alpha: float = 0.3,
-        root_dirichlet_eps: float = 0.25,
-        verbose: bool = False,
-        reuse_tree: bool = True,
-        strict: bool = False,   # ← 추가
-    ):
-        self.engine = engine
-        self.side = side.lower()
-        self.simulations = simulations
-        self.c_uct = c_uct
-        ...
-        self.verbose = verbose
-        self.reuse_tree = reuse_tree
-        self.strict = strict     # ← 추가
-
 from __future__ import annotations
 import math
 import copy
@@ -103,14 +77,15 @@ class MCTSAgent:
         engine,
         side: str,
         simulations: int = 800,
-        c_uct: float = 2.0, # Higher exploration for complex wargames
+        c_uct: float = 2.0,  # Higher exploration for complex wargames
         model_path: Optional[str] = None,
         gemini: Optional[GeminiCaller] = None,
         seed: Optional[int] = None,
         root_dirichlet_alpha: float = 0.3,
         root_dirichlet_eps: float = 0.25,
         verbose: bool = False,
-        reuse_tree: bool = True # Expert Feature: Keep tree between moves
+        reuse_tree: bool = True,  # Expert Feature: Keep tree between moves
+        strict: bool = False,     # ← 여기 추가
     ):
         self.engine = engine
         self.side = side.lower().strip()
@@ -122,7 +97,8 @@ class MCTSAgent:
         self.root_dirichlet_eps = root_dirichlet_eps
         self.verbose = verbose
         self.reuse_tree = reuse_tree
-        
+        self.strict = strict      # ← 여기 추가
+
         self._last_root: Optional[Node] = None
         self._transpo: Dict[str, Node] = {}
 
@@ -452,22 +428,27 @@ class MCTSAgent:
 
         return node
 
-    def _legal_actions(self, state):
+
+      def _legal_actions(self, state):
         try:
             return self.engine.get_legal_actions(state)
-        except Exception:
+        except Exception as e:
+            if self.strict:
+                # 디버그 모드: 조용히 죽지 말고 바로 터뜨리기
+                raise
+            if self.verbose:
+                print(f"[MCTS] WARNING: get_legal_actions failed, falling back to Pass. Error: {e}")
             return [{"type": "Pass"}]
-
+   
     def _safe_apply(self, state, action):
         try:
             return self.engine.apply_action(state, action)
         except Exception as e:
-            # Debug/development mode: fail loud
-            raise
-            # Or at minimum:
-            # print(f"[MCTS] ERROR in apply_action({action}): {e}")
-            # return state
-
+            if self.strict:
+                raise
+            if self.verbose:
+                print(f"[MCTS] WARNING: apply_action failed, returning unchanged state. Error: {e}")
+            return state
 
     def _state_key(self, state):
         """
@@ -504,29 +485,12 @@ class MCTSAgent:
 
     def _inject_root_dirichlet(self, root: Node):
         count = len(root.unexpanded_actions)
-        if count < 2: return
-        noise = self.rng.dirichlet([self.root_dirichlet_alpha] * count)
+        if count < 2:
+            return
+        noise = np.random.dirichlet([self.root_dirichlet_alpha] * count)
         for i, act in enumerate(root.unexpanded_actions):
-            act['_prior'] = (1 - self.root_dirichlet_eps) * act.get('_prior', 0.0) + self.root_dirichlet_eps * noise[i]
+            act['_prior'] = (
+                (1 - self.root_dirichlet_eps) * act.get('_prior', 0.0)
+                + self.root_dirichlet_eps * float(noise[i])
+            )
         root.unexpanded_actions.sort(key=lambda x: x.get('_prior', 0.0), reverse=True)
-   
-    def _legal_actions(self, state):
-        try:
-            return self.engine.get_legal_actions(state)
-        except Exception as e:
-            if self.strict:
-                # 디버그 모드: 조용히 죽지 말고 바로 터뜨리기
-                raise
-            if self.verbose:
-                print(f"[MCTS] WARNING: get_legal_actions failed, falling back to Pass. Error: {e}")
-            return [{"type": "Pass"}]
-   
-    def _safe_apply(self, state, action):
-        try:
-            return self.engine.apply_action(state, action)
-        except Exception as e:
-            if self.strict:
-                raise
-            if self.verbose:
-                print(f"[MCTS] WARNING: apply_action failed, returning unchanged state. Error: {e}")
-            return state
