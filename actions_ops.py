@@ -69,26 +69,29 @@ class OpsLoggingMixin:
     # Resolution stubs (replace with your real combat/impact code)
     # Each must RETURN a short human string for the log.
     # -----------------------------
-    def _resolve_bm_attack(self, state, side, target, battalions, missile_type) -> str:
-        # ← replace with your real implementation (damage rolls, defenses, etc.)
-        return f"{battalions}x {missile_type} launched at {target} (resolution stub)"
+    def _resolve_special_warfare(self, *args, **kwargs):
+        raise NotImplementedError(
+            "_resolve_special_warfare is not used directly. "
+            "Use GameEngine._resolve_order_special_warfare / _resolve_sw_execution instead."
+        )
 
-    def _resolve_special_warfare(self, state, side, mission_name, target, ip_spent, mp_spent) -> str:
-        # ← replace with your real implementation
-        return f"SW mission '{mission_name}' vs {target} using IP={ip_spent}, MP={mp_spent} (resolution stub)"
+    def _resolve_terror_attack(self, *args, **kwargs):
+        raise NotImplementedError(
+            "_resolve_terror_attack (OpsLoggingMixin) should not be called. "
+            "GameEngine._resolve_order_terror_attack / _resolve_terror_attack are the canonical implementations."
+        )
 
-    def _resolve_terror_attack(self, state, side, target, ip_spent, mp_spent) -> str:
-        # ← replace with your real implementation
-        return f"Terror attack vs {target} using IP={ip_spent}, MP={mp_spent} (resolution stub)"
+    def _resolve_airstrike(self, *args, **kwargs):
+        raise NotImplementedError(
+            "_resolve_airstrike (OpsLoggingMixin) is a stub. "
+            "Use GameEngine._resolve_order_airstrike / _resolve_airstrike_combat instead."
+        )
 
-    def _resolve_airstrike(self, state, side, target) -> str:
-        # ← replace with your real implementation
-        return f"Airstrike on {target} (resolution stub)"
-
-    def _resolve_close_strait(self, state, side, mp_spent, ip_spent, pp_spent_from_israel) -> str:
-        # ← replace with your real implementation
-        return (f"Close Strait attempt MP={mp_spent}, IP={ip_spent}, "
-                f"ISR counter PP={pp_spent_from_israel} (resolution stub)")
+    def _resolve_close_strait(self, *args, **kwargs):
+        raise NotImplementedError(
+            "_resolve_close_strait (OpsLoggingMixin) is a stub. "
+            "Provide a concrete implementation in GameEngine if you intend to use Close Strait actions."
+        )
 
     # -----------------------------
     # Public action handlers (call these from apply_action)
@@ -174,4 +177,5 @@ class OpsLoggingMixin:
         result = self._resolve_close_strait(state, side, mp_spent, ip_spent, israel_pp_counter)
 
         self._log(state, f"[RESULT] Strait: {result}")
+
 
