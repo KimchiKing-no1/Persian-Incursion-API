@@ -144,6 +144,66 @@ class GameEngine(OpsLoggingMixin):
             self._log(state, f"{side} gained from opinions: +{add[0]}PP, +{add[1]}IP, +{add[2]}MP")
 
     # --------------------------- CARDS & RIVER LOGIC ---------------------------
+        def _apply_play_card(self, state, side: str, card_id: int, action: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Core logic for playing a card:
+          - check cost from rules
+          - spend resources
+          - remove from river (and refill)
+          - mark per-impulse card usage
+          - advance turn (unless 'keep_impulse' flag)
+        """
+        self._ensure_player(state, side)
+        p = state["players"][side]
+        res = p["resources"]
+
+        # 1) 카드 정의 찾기
+        card_map = self.rules.get("cards", {}).get(side, {})
+        cdef = card_map.get(card_id)
+        if not cdef:
+            self._log(state, f"[WARN] {side} tried to play unknown card #{card_id}")
+            return state
+
+        # 2) 비용 계산 (rules_blob에서 가져오는 cost_map 사용)
+        cost_map = self._card_cost_map(side, card_id)  # {'pp':..., 'ip':..., 'mp':...}
+        need_pp = int(cost_map.get("pp", 0))
+        need_ip = int(cost_map.get("ip", 0))
+        need_mp = int(cost_map.get("mp", 0))
+
+        if res.get("pp", 0) < need_pp or res.get("ip", 0) < need_ip or res.get("mp", 0) < need_mp:
+            self._log(state, f"[CARD] {side} cannot afford card #{card_id} ({need_pp}P {need_ip}I {need_mp}M).")
+            return state
+
+        # 3) 자원 소모
+        res["pp"] -= need_pp
+        res["ip"] -= need_ip
+        res["mp"] -= need_mp
+
+        # 4) 리버에서 카드 제거 + 리필
+        self._on_card_removed_from_river(state, side, card_id, to_discard=True)
+
+        # 5) 카드 효과 처리 (정밀 구현은 TODO; 지금은 로그 + 플래그만)
+        self._log(state, f"[CARD] {side} plays #{card_id}: {cdef.get('Name', '')}")
+
+        # 여기서 실제 효과(여론 변경, 자원, 이벤트 등록 등)를
+        # rules_blob.CARDS_STRUCTURED / Effect 필드를 읽어서 구현하면 완전 룰 준수 가능함.
+        # 지금은 엔진 구조만 맞추고, 세부 효과는 추후 확장 포인트로 남겨둠.
+
+        # 6) impulse 카드 사용 플래그
+        turn = state.setdefault("turn", {})
+        per_imp = turn.setdefault("per_impulse_card_played", {})
+        per_imp[side] = True
+
+        # 7) 'keep_impulse' 플래그 체크
+        flags = set(self._card_struct(side, card_id).get("flags", []))
+        if "keep_impulse" in flags:
+            # 충격 카드 등: impulse 유지
+            return self._resolve_play_card_keep_impulse(state, {"card_id": card_id})
+
+        # 기본: 카드 플레이 후 상대 차례로 넘김 (Pass와 다르게 consecutive_passes는 리셋)
+        turn["consecutive_passes"] = 0
+        return self._advance_turn(state)
+
     def _card_struct(self, side: str, cid: int):
         return self.rules.get("cards_structured", {}).get(
             "iran" if side.lower().startswith("ir") else "israel", {}
@@ -561,38 +621,72 @@ class GameEngine(OpsLoggingMixin):
         actions.append({"type": "End Impulse"})
         return actions
 
-    def apply_actions(self, state: Dict[str, Any], actions: List[Dict[str, Any]], side: Optional[str] = None):
-        """Apply a sequence of actions, returning the new state and accumulated log."""
-        if not isinstance(state, dict):
-            raise ValueError("state must be a dict")
-        if not isinstance(actions, list):
-            raise ValueError("actions must be a list of dicts")
-
-        working = copy.deepcopy(state)
-        turn = working.setdefault("turn", {})
-        if side:
-            turn["current_player"] = side
-
-        working.setdefault("log", [])
-        start_log_idx = len(working["log"])
-        
-        for idx, action in enumerate(actions):
+        def apply_action(self, state: Dict[str, Any], action: Dict[str, Any], side: Optional[str] = None) -> Dict[str, Any]:
+            """
+            Single-step state transition for one high-level action.
+            This is what MCTS/RL should call.
+            """
+            if state is None or not isinstance(state, dict):
+                raise ValueError("state must be a dict")
             if not isinstance(action, dict):
-                continue
-            try:
-                # Call the singular method for each action
-                updated = self.apply_action(working, action)
-            except Exception as exc:
-                raise ValueError(f"apply_actions[{idx}] failed for {action}: {exc}") from exc
-            if isinstance(updated, dict):
-                working = updated
+                raise ValueError("action must be a dict")
+    
+            # We mutate in-place; callers (MCTS/RL) should deepcopy beforehand when needed.
+            s = state
+            turn = s.setdefault("turn", {})
+            acting_side = side or turn.get("current_player", "israel")
+            self._ensure_player(s, acting_side)
+    
+            a_type = action.get("type")
+            if not a_type:
+                raise ValueError(f"action is missing 'type': {action}")
+    
+            # -----------------------
+            # 1) PASS / END IMPULSE
+            # -----------------------
+            if a_type in ("Pass", "End Impulse"):
+                self._log(s, f"[ACTION] {acting_side}: {a_type}")
+                turn["consecutive_passes"] = int(turn.get("consecutive_passes", 0)) + 1
+                return self._advance_turn(s)
+    
+            # -----------------------
+            # 2) PLAY CARD
+            # -----------------------
+            if a_type == "Play Card":
+                card_id = action.get("card_id")
+                if card_id is None:
+                    raise ValueError("Play Card action must include 'card_id'")
+                return self._apply_play_card(s, acting_side, card_id, action)
+    
+            # -----------------------
+            # 3) OPS – AIRSTRIKE
+            # -----------------------
+            if a_type == "Order Airstrike":
 
-        # Extract just the new log entries
-        new_entries = []
-        if isinstance(working.get("log"), list):
-            new_entries = [str(entry) for entry in working["log"][start_log_idx:]]
+                return self._resolve_order_airstrike(s, action, do_advance=True)
+    
+            # -----------------------
+            # 4) OPS – SPECIAL WARFARE
+            # -----------------------
+            if a_type == "Order Special Warfare":
+                return self._resolve_order_special_warfare(s, action, do_advance=True)
+    
+            # -----------------------
+            # 5) OPS – BALLISTIC MISSILE
+            # -----------------------
+            if a_type == "Order Ballistic Missile":
+                return self._resolve_order_ballistic_missile(s, action, do_advance=True)
+    
+            # -----------------------
+            # 6) OPS – TERROR ATTACK
+            # -----------------------
+            if a_type == "Order Terror Attack":
+                return self._resolve_order_terror_attack(s, action, do_advance=True)
+    
+            self._log(s, f"[WARN] Unknown action type {a_type}; treating as Pass.")
+            turn["consecutive_passes"] = int(turn.get("consecutive_passes", 0)) + 1
+            return self._advance_turn(s)
 
-        return working, new_entries
     # -------------------------- TURN MGMT --------------------------------------
     def _advance_turn(self, state):
         turn = state.setdefault('turn', {})
@@ -628,15 +722,14 @@ class GameEngine(OpsLoggingMixin):
         self._reset_impulse_flags(state)
         return state
 
-    def _resolve_play_card_keep_impulse(self, state, action):
-        # ... Same implementation as previous snippet ...
-        # For brevity, ensuring it handles logic and returns state
-        side = state['turn']['current_player']
-        card_id = action.get('card_id')
-        if card_id is not None:
-            self._on_card_removed_from_river(state, side, card_id)
-            # Apply effects logic...
-        return state
+        def _resolve_play_card_keep_impulse(self, state, action):
+        
+            side = state.get("turn", {}).get("current_player", "israel")
+            
+            self._log(state, f"[CARD] {side} keeps impulse after card play.")
+            
+            return state
+
 
     def _morning_reset_resources(self, state):
          for side in ("israel","iran"):
