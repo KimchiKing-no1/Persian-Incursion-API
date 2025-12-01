@@ -429,7 +429,7 @@ class MCTSAgent:
         return node
 
 
-      def _legal_actions(self, state):
+    def _legal_actions(self, state):
         try:
             return self.engine.get_legal_actions(state)
         except Exception as e:
