@@ -1,4 +1,4 @@
-import hashlib, json, uuid, importlib, copy, os
+import hashlib, json, uuid, importlib, copy, os, time
 from typing import Any, Dict, List, Optional
 from google.cloud import firestore
 from google.oauth2 import service_account
@@ -83,6 +83,13 @@ try:
 except Exception:
     ge = None
 
+
+ENGINE = GameEngine()
+
+AGENTS: Dict[str, MCTSAgent] = {
+    "israel": MCTSAgent(ENGINE, "israel", simulations=400, strict=True, reuse_tree=True),
+    "iran":   MCTSAgent(ENGINE, "iran",   simulations=400, strict=True, reuse_tree=True),
+}
 # ---------- App ----------
 app = FastAPI(
     title="Persian Incursion Strategy API",
@@ -1141,6 +1148,111 @@ def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
     return {"game_id": game_id, "steps": steps}
 
 
+class RlMoveRequest(BaseModel):
+    game_id: str
+    side: str              # "israel" or "iran"
+    state: Dict[str, Any]  # 전체 게임 상태 JSON
+    temperature: float = 0.0  # 0 = argmax, >0 = exploration
+
+class RlMoveResponse(BaseModel):
+    action: Dict[str, Any]
+    policy: Optional[Dict[str, float]] = None
+    explanation: str
+def explain_action(side: str, action: Dict[str, Any]) -> str:
+    s = side.lower()
+    t = action.get("type")
+
+    if t == "Order Airstrike":
+        return f"{s.capitalize()} RL agent ordered an airstrike on {action.get('target')} via {action.get('corridor')} corridor."
+    if t == "Order Special Warfare":
+        return f"{s.capitalize()} RL agent launches a Special Warfare operation against {action.get('target')}."
+    if t == "Order Ballistic Missile":
+        return f"{s.capitalize()} RL agent fires {action.get('missile_type')} at {action.get('target')}."
+    if t == "Order Terror Attack":
+        return f"{s.capitalize()} RL agent conducts a terror attack targeting {action.get('target')}."
+    if t == "Play Card":
+        return f"{s.capitalize()} RL agent plays card #{action.get('card_id')}."
+    if t in ("Pass", "End Impulse"):
+        return f"{s.capitalize()} RL agent passes / ends the impulse."
+
+    return f"{s.capitalize()} RL agent chose action: {t}."
+def log_rl_decision(
+    game_id: str,
+    side: str,
+    state: Dict[str, Any],
+    action: Dict[str, Any],
+    policy: Optional[Dict[str, float]],
+    explanation: str,
+) -> None:
+    """
+    RL/MCTS가 고른 수를 Firestore에 저장.
+    나중에 self-play 데이터로 학습에 사용 가능.
+    """
+    # non-serializable 필드 제거
+    state_to_log = {k: v for k, v in state.items() if k not in ("_rng", "log")}
+
+    record = {
+        "game_id": game_id,
+        "side": side.lower(),
+        "state": state_to_log,
+        "action": action,
+        "policy": policy,
+        "explanation": explanation,
+        "timestamp": time.time(),
+    }
+
+    if firestore_client:
+        try:
+            doc_ref = (
+                firestore_client
+                .collection("rl_episodes")
+                .document(game_id)
+                .collection("steps")
+                .document()  # auto-id
+            )
+            doc_ref.set(record)
+        except Exception as e:
+            print(f"⚠ Firestore log_rl_decision failed for {game_id}: {e}")
+
+@app.post("/pi_rl_move", response_model=RlMoveResponse)
+async def pi_rl_move(req: RlMoveRequest):
+    """
+    Given a game state & side, return the RL/MCTS-best action.
+    동시에 그 결정을 Firestore에 저장.
+    MyGPT는 이 엔드포인트를 호출해서 'RL 기반 답변'을 만들면 된다.
+    """
+    side = req.side.lower().strip()
+    if side not in AGENTS:
+        raise ValueError(f"Unknown side '{req.side}', expected 'israel' or 'iran'")
+
+    agent = AGENTS[side]
+
+    # 호출자가 준 state를 변형하지 않도록 deepcopy
+    state_copy = copy.deepcopy(req.state)
+
+    # RL/MCTS로 최선의 수 선택
+    best_action, policy = agent.choose_action(
+        state_copy,
+        temperature=req.temperature,
+    )
+
+    explanation = explain_action(side, best_action)
+
+    # Firestore에 RL 결정 로그 저장
+    log_rl_decision(
+        game_id=req.game_id,
+        side=side,
+        state=state_copy,
+        action=best_action,
+        policy=policy,
+        explanation=explanation,
+    )
+
+    return RlMoveResponse(
+        action=best_action,
+        policy=policy,
+        explanation=explanation,
+    )
 
 
 
