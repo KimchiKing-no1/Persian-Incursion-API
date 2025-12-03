@@ -34,75 +34,7 @@ if FIREBASE_PROJECT_ID and FIREBASE_CREDENTIALS_JSON:
 else:
     print("ℹ Firestore env vars not set; logs only kept in memory.")
 
-@app.post("/ai_move", response_model=AIMoveResponse)
-def ai_move(req: AIMoveRequest):
-    if not ge: 
-        raise HTTPException(500, "Engine not available.")
 
-    # 1. Dynamic Side Detection
-    target_side = req.side
-    if not target_side:
-        target_side = req.state.get("turn", {}).get("current_player", "israel").lower()
-    
-    # Normalize side string
-    target_side = target_side.lower()
-    if target_side.startswith("i"):
-         if "s" in target_side[0:2]: target_side = "israel"
-         elif "r" in target_side[0:2]: target_side = "iran"
-
-    # 2. Load the Correct Agent
-    agent = AGENTS.get(target_side)
-    if not agent: 
-        raise HTTPException(400, f"Invalid side detected: {target_side}")
-
-    # 3. AI Thinking (MCTS)
-    best_action, policy = agent.choose_action(copy.deepcopy(req.state))
-    
-    # 4. Execute Move (Get New State)
-    eng = ge.GameEngine()
-    next_state, reward, done, info = eng.rl_step(
-        copy.deepcopy(req.state),
-        best_action,
-        side=target_side,
-    )
-
-    # 5. Log for Training (Firebase)
-    log_transition(
-        req.game_id, 
-        req.state, 
-        target_side, 
-        best_action, 
-        reward, 
-        done, 
-        info, 
-        policy
-    )
-
-    # 6. Generate Context for MyGPT
-    threats = []
-    dmg_map = next_state.get("target_damage_status", {})
-    for target_name, damage_data in dmg_map.items():
-        if isinstance(damage_data, dict):
-             if any(v.get("damage_boxes_hit", 0) > 0 for v in damage_data.values() if isinstance(v, dict)):
-                threats.append(target_name)
-
-    role_title = "IAF Commander" if target_side == "israel" else "IRGC Commander"
-    
-    gpt_context = {
-        "active_side": target_side,
-        "narrative_role": role_title,
-        "move_description": f"Executing {best_action.get('type')} against {best_action.get('target', 'unknown target')}.",
-        "strategic_reasoning": "MCTS simulations indicate this move maximizes long-term strategic advantage.",
-        "critical_alerts": threats[:3],
-        "game_over": done
-    }
-
-    return {
-        "action": best_action,
-        "new_state": next_state,
-        "gpt_context": gpt_context,
-        "done": done
-    }
 
 def log_transition(game_id, state, side, action, reward, done, info, policy=None):
     """
@@ -164,10 +96,26 @@ AGENTS: Dict[str, MCTSAgent] = {
     "israel": MCTSAgent(ENGINE, "israel", simulations=400, strict=True, reuse_tree=True),
     "iran":   MCTSAgent(ENGINE, "iran",   simulations=400, strict=True, reuse_tree=True),
 }
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- Startup ---
+    print("Loading AI Memory...")
+    load_action_map()  # Restores the meaning of actions
+    
+    yield  # App runs here
+    
+    # --- Shutdown ---
+    print("Saving AI Memory...")
+    save_action_map()  # Saves new actions learned
+    if AGENTS.get("israel").pv_model:
+        AGENTS["israel"].pv_model.save("israel_model.pth")
+    if AGENTS.get("iran").pv_model:
+        AGENTS["iran"].pv_model.save("iran_model.pth")
 # ---------- App ----------
 app = FastAPI(
     title="Persian Incursion Strategy API",
     version="0.3.0",
+    lifespan=lifespan,
     description="Authoritative rules + action enumerator to bound MyGPT",
     servers=[{"url": "https://persian-incursion-api.onrender.com"}]
 )
@@ -502,11 +450,6 @@ class HumanMoveRequest(BaseModel):
     side: str              # "israel" or "iran"
     state: Dict[str, Any]
     action: Dict[str, Any]
-
-class AIMoveRequest(BaseModel):
-    game_id: str
-    side: str          # AI가 담당하는 side
-    state: Dict[str, Any]
 
 
 @app.post("/human_move")
@@ -1196,28 +1139,26 @@ class AIMoveResponse(BaseModel):
 
 @app.post("/ai_move", response_model=AIMoveResponse)
 def ai_move(req: AIMoveRequest):
-    if not ge: 
+    if not ge:
         raise HTTPException(500, "Engine not available.")
 
     # 1. Dynamic Side Detection
-    target_side = req.side
+    # 우선 요청에 side가 있으면 우선 사용, 없으면 state.turn.current_player에서 추론
+    raw_side = req.side or req.state.get("turn", {}).get("current_player", "israel")
+
+    # 문자열로 변환해서 정규화 테이블에 태움
+    target_side = _SIDE_NORMALIZE.get(str(raw_side), None)
     if not target_side:
-        target_side = req.state.get("turn", {}).get("current_player", "israel").lower()
-    
-    # Normalize side string
-    target_side = target_side.lower()
-    if target_side.startswith("i"):
-         if "s" in target_side[0:2]: target_side = "israel"
-         elif "r" in target_side[0:2]: target_side = "iran"
+        raise HTTPException(400, f"Invalid side detected: {raw_side}")
 
     # 2. Load the Correct Agent
     agent = AGENTS.get(target_side)
-    if not agent: 
-        raise HTTPException(400, f"Invalid side detected: {target_side}")
+    if not agent:
+        raise HTTPException(400, f"No agent configured for side: {target_side}")
 
     # 3. AI Thinking (MCTS)
     best_action, policy = agent.choose_action(copy.deepcopy(req.state))
-    
+
     # 4. Execute Move (Get New State)
     eng = ge.GameEngine()
     next_state, reward, done, info = eng.rl_step(
@@ -1228,13 +1169,13 @@ def ai_move(req: AIMoveRequest):
 
     # 5. Log for Training (Firebase)
     log_transition(
-        req.game_id, 
-        req.state, 
-        target_side, 
-        best_action, 
-        reward, 
-        done, 
-        info, 
+        req.game_id,
+        req.state,
+        target_side,
+        best_action,
+        reward,
+        done,
+        info,
         policy
     )
 
@@ -1243,11 +1184,11 @@ def ai_move(req: AIMoveRequest):
     dmg_map = next_state.get("target_damage_status", {})
     for target_name, damage_data in dmg_map.items():
         if isinstance(damage_data, dict):
-             if any(v.get("damage_boxes_hit", 0) > 0 for v in damage_data.values() if isinstance(v, dict)):
+            if any(v.get("damage_boxes_hit", 0) > 0 for v in damage_data.values() if isinstance(v, dict)):
                 threats.append(target_name)
 
     role_title = "IAF Commander" if target_side == "israel" else "IRGC Commander"
-    
+
     gpt_context = {
         "active_side": target_side,
         "narrative_role": role_title,
@@ -1263,49 +1204,3 @@ def ai_move(req: AIMoveRequest):
         "gpt_context": gpt_context,
         "done": done
     }
-
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # --- Startup ---
-    print("Loading AI Memory...")
-    load_action_map() # Restores the meaning of actions
-    
-    yield # App runs here
-    
-    # --- Shutdown ---
-    print("Saving AI Memory...")
-    save_action_map() # Saves new actions learned
-    if AGENTS.get("israel").pv_model:
-        AGENTS["israel"].pv_model.save("israel_model.pth")
-    if AGENTS.get("iran").pv_model:
-        AGENTS["iran"].pv_model.save("iran_model.pth")
-
-# Update the app definition to use lifespan
-app = FastAPI(
-    title="Persian Incursion Strategy API",
-    version="0.3.0",
-    lifespan=lifespan, # <--- Add this
-    servers=[{"url": "https://persian-incursion-api.onrender.com"}]
-)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
