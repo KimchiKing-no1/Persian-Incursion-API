@@ -1282,7 +1282,8 @@ app = FastAPI(
     lifespan=lifespan, # <--- Add this
     servers=[{"url": "https://persian-incursion-api.onrender.com"}]
 )
-3. Quick Optimization for mcts.
+
+
 
 
 
