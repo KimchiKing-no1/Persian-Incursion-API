@@ -68,7 +68,20 @@ class Node:
     def _current_player_side(self) -> str:
         return self.state.get("turn", {}).get("current_player", "israel").lower()
 
-
+def _fast_copy(self, state):
+    # Only copy mutable game data. 
+    # Do NOT deepcopy the entire 'rules' dictionary (it is static and huge).
+    new_state = {
+        "turn": state.get("turn", {}).copy(),
+        "players": copy.deepcopy(state.get("players", {})), # Resources/Cards need deepcopy
+        "opinion": copy.deepcopy(state.get("opinion", {})),
+        "target_damage_status": copy.deepcopy(state.get("target_damage_status", {})),
+        "squadrons": copy.deepcopy(state.get("squadrons", {})),
+        # Reference immutable rules instead of copying
+        "rules": state.get("rules"), 
+        "_rng": state.get("_rng") # Pass RNG reference or re-seed
+    }
+    return new_state
 # ============================== A G E N T ====================================
 
 class MCTSAgent:
@@ -246,7 +259,7 @@ class MCTSAgent:
 
     def _expand(self, node: Node) -> Node:
         action = node.unexpanded_actions.pop(0)
-        next_state = self._safe_apply(copy.deepcopy(node.state), action)
+        next_state = self._safe_apply(self._fast_copy(node.state), action)
         
         child = self._make_node(next_state, parent=node, incoming_action=action)
         
