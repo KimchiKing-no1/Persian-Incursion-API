@@ -6,6 +6,8 @@ from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel, Field, ConfigDict
 from fastapi.openapi.utils import get_openapi
+from contextlib import asynccontextmanager
+from features import load_action_map, save_action_map
 
 import time
 from game_engine import GameEngine
@@ -1257,6 +1259,30 @@ async def pi_rl_move(req: RlMoveRequest):
         policy=policy,
         explanation=explanation,
     )
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- Startup ---
+    print("Loading AI Memory...")
+    load_action_map() # Restores the meaning of actions
+    
+    yield # App runs here
+    
+    # --- Shutdown ---
+    print("Saving AI Memory...")
+    save_action_map() # Saves new actions learned
+    if AGENTS.get("israel").pv_model:
+        AGENTS["israel"].pv_model.save("israel_model.pth")
+    if AGENTS.get("iran").pv_model:
+        AGENTS["iran"].pv_model.save("iran_model.pth")
+
+# Update the app definition to use lifespan
+app = FastAPI(
+    title="Persian Incursion Strategy API",
+    version="0.3.0",
+    lifespan=lifespan, # <--- Add this
+    servers=[{"url": "https://persian-incursion-api.onrender.com"}]
+)
+3. Quick Optimization for mcts.
 
 
 
