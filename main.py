@@ -470,51 +470,77 @@ def human_move(req: HumanMoveRequest):
         "done": done,
         "info": info,
     }
-@app.post("/ai_move")
+
+@app.post("/ai_move", response_model=AIMoveResponse)
 def ai_move(req: AIMoveRequest):
-    if not ge:
+    if not ge: 
         raise HTTPException(500, "Engine not available.")
 
-    import mcts as mcts_mod
+    # 1. Dynamic Side Detection
+    target_side = req.side
+    if not target_side:
+        target_side = req.state.get("turn", {}).get("current_player", "israel").lower()
+    
+    # Normalize side string
+    target_side = target_side.lower()
+    if target_side.startswith("i"):
+         if "s" in target_side[0:2]: target_side = "israel"
+         elif "r" in target_side[0:2]: target_side = "iran"
 
-    eng = ge.GameEngine()
-    agent = mcts_mod.MCTSAgent(
-        engine=eng,
-        side=req.side,
-        simulations=400,      # 상황 보면서 조절
-        verbose=False,
-    )
+    # 2. Load the Correct Agent
+    agent = AGENTS.get(target_side)
+    if not agent: 
+        raise HTTPException(400, f"Invalid side detected: {target_side}")
 
-    # MCTS로 best_action + policy 얻기
+    # 3. AI Thinking (MCTS)
     best_action, policy = agent.choose_action(copy.deepcopy(req.state))
-
-    # 엔진에 실제로 적용
+    
+    # 4. Execute Move (Get New State)
+    eng = ge.GameEngine()
     next_state, reward, done, info = eng.rl_step(
         copy.deepcopy(req.state),
         best_action,
-        side=req.side,
+        side=target_side,
     )
 
-    # RL 학습용 로그
+    # 5. Log for Training (Firebase)
     log_transition(
-        req.game_id,
-        req.state,
-        req.side,
-        best_action,
-        reward,
-        done,
-        info,
-        policy=policy,
+        req.game_id, 
+        req.state, 
+        target_side, 
+        best_action, 
+        reward, 
+        done, 
+        info, 
+        policy
     )
+
+    # 6. Generate Context for MyGPT
+    threats = []
+    dmg_map = next_state.get("target_damage_status", {})
+    for target_name, damage_data in dmg_map.items():
+        if isinstance(damage_data, dict):
+             if any(v.get("damage_boxes_hit", 0) > 0 for v in damage_data.values() if isinstance(v, dict)):
+                threats.append(target_name)
+
+    role_title = "IAF Commander" if target_side == "israel" else "IRGC Commander"
+    
+    gpt_context = {
+        "active_side": target_side,
+        "narrative_role": role_title,
+        "move_description": f"Executing {best_action.get('type')} against {best_action.get('target', 'unknown target')}.",
+        "strategic_reasoning": "MCTS simulations indicate this move maximizes long-term strategic advantage.",
+        "critical_alerts": threats[:3],
+        "game_over": done
+    }
 
     return {
         "action": best_action,
         "new_state": next_state,
-        "reward": reward,
-        "done": done,
-        "info": info,
+        "gpt_context": gpt_context,
+        "done": done
     }
-
+    
 # ---------- Universes (nonce → action_id → EnumeratedAction) ----------
 _UNIVERSES: Dict[str, Dict[str, EnumeratedAction]] = {}
 
@@ -1154,111 +1180,92 @@ def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
     return {"game_id": game_id, "steps": steps}
 
 
-class RlMoveRequest(BaseModel):
-    game_id: str
-    side: str              # "israel" or "iran"
-    state: Dict[str, Any]  # 전체 게임 상태 JSON
-    temperature: float = 0.0  # 0 = argmax, >0 = exploration
+# --- Update these models in main.py ---
 
-class RlMoveResponse(BaseModel):
+class AIMoveRequest(BaseModel):
+    game_id: str = "default_game"
+    # Make side Optional so the API detects it from the JSON state
+    side: Optional[str] = None 
+    state: Dict[str, Any]
+
+class AIMoveResponse(BaseModel):
     action: Dict[str, Any]
-    policy: Optional[Dict[str, float]] = None
-    explanation: str
-def explain_action(side: str, action: Dict[str, Any]) -> str:
-    s = side.lower()
-    t = action.get("type")
+    new_state: Dict[str, Any]
+    gpt_context: Dict[str, Any] # <--- The "Brain" for MyGPT
+    done: bool
 
-    if t == "Order Airstrike":
-        return f"{s.capitalize()} RL agent ordered an airstrike on {action.get('target')} via {action.get('corridor')} corridor."
-    if t == "Order Special Warfare":
-        return f"{s.capitalize()} RL agent launches a Special Warfare operation against {action.get('target')}."
-    if t == "Order Ballistic Missile":
-        return f"{s.capitalize()} RL agent fires {action.get('missile_type')} at {action.get('target')}."
-    if t == "Order Terror Attack":
-        return f"{s.capitalize()} RL agent conducts a terror attack targeting {action.get('target')}."
-    if t == "Play Card":
-        return f"{s.capitalize()} RL agent plays card #{action.get('card_id')}."
-    if t in ("Pass", "End Impulse"):
-        return f"{s.capitalize()} RL agent passes / ends the impulse."
+@app.post("/ai_move", response_model=AIMoveResponse)
+def ai_move(req: AIMoveRequest):
+    if not ge: 
+        raise HTTPException(500, "Engine not available.")
 
-    return f"{s.capitalize()} RL agent chose action: {t}."
-def log_rl_decision(
-    game_id: str,
-    side: str,
-    state: Dict[str, Any],
-    action: Dict[str, Any],
-    policy: Optional[Dict[str, float]],
-    explanation: str,
-) -> None:
-    """
-    RL/MCTS가 고른 수를 Firestore에 저장.
-    나중에 self-play 데이터로 학습에 사용 가능.
-    """
-    # non-serializable 필드 제거
-    state_to_log = {k: v for k, v in state.items() if k not in ("_rng", "log")}
+    # 1. Dynamic Side Detection
+    target_side = req.side
+    if not target_side:
+        target_side = req.state.get("turn", {}).get("current_player", "israel").lower()
+    
+    # Normalize side string
+    target_side = target_side.lower()
+    if target_side.startswith("i"):
+         if "s" in target_side[0:2]: target_side = "israel"
+         elif "r" in target_side[0:2]: target_side = "iran"
 
-    record = {
-        "game_id": game_id,
-        "side": side.lower(),
-        "state": state_to_log,
-        "action": action,
-        "policy": policy,
-        "explanation": explanation,
-        "timestamp": time.time(),
+    # 2. Load the Correct Agent
+    agent = AGENTS.get(target_side)
+    if not agent: 
+        raise HTTPException(400, f"Invalid side detected: {target_side}")
+
+    # 3. AI Thinking (MCTS)
+    best_action, policy = agent.choose_action(copy.deepcopy(req.state))
+    
+    # 4. Execute Move (Get New State)
+    eng = ge.GameEngine()
+    next_state, reward, done, info = eng.rl_step(
+        copy.deepcopy(req.state),
+        best_action,
+        side=target_side,
+    )
+
+    # 5. Log for Training (Firebase)
+    log_transition(
+        req.game_id, 
+        req.state, 
+        target_side, 
+        best_action, 
+        reward, 
+        done, 
+        info, 
+        policy
+    )
+
+    # 6. Generate Context for MyGPT
+    threats = []
+    dmg_map = next_state.get("target_damage_status", {})
+    for target_name, damage_data in dmg_map.items():
+        if isinstance(damage_data, dict):
+             if any(v.get("damage_boxes_hit", 0) > 0 for v in damage_data.values() if isinstance(v, dict)):
+                threats.append(target_name)
+
+    role_title = "IAF Commander" if target_side == "israel" else "IRGC Commander"
+    
+    gpt_context = {
+        "active_side": target_side,
+        "narrative_role": role_title,
+        "move_description": f"Executing {best_action.get('type')} against {best_action.get('target', 'unknown target')}.",
+        "strategic_reasoning": "MCTS simulations indicate this move maximizes long-term strategic advantage.",
+        "critical_alerts": threats[:3],
+        "game_over": done
     }
 
-    if firestore_client:
-        try:
-            doc_ref = (
-                firestore_client
-                .collection("rl_episodes")
-                .document(game_id)
-                .collection("steps")
-                .document()  # auto-id
-            )
-            doc_ref.set(record)
-        except Exception as e:
-            print(f"⚠ Firestore log_rl_decision failed for {game_id}: {e}")
+    return {
+        "action": best_action,
+        "new_state": next_state,
+        "gpt_context": gpt_context,
+        "done": done
+    }
 
-@app.post("/pi_rl_move", response_model=RlMoveResponse)
-async def pi_rl_move(req: RlMoveRequest):
-    """
-    Given a game state & side, return the RL/MCTS-best action.
-    동시에 그 결정을 Firestore에 저장.
-    MyGPT는 이 엔드포인트를 호출해서 'RL 기반 답변'을 만들면 된다.
-    """
-    side = req.side.lower().strip()
-    if side not in AGENTS:
-        raise ValueError(f"Unknown side '{req.side}', expected 'israel' or 'iran'")
 
-    agent = AGENTS[side]
 
-    # 호출자가 준 state를 변형하지 않도록 deepcopy
-    state_copy = copy.deepcopy(req.state)
-
-    # RL/MCTS로 최선의 수 선택
-    best_action, policy = agent.choose_action(
-        state_copy,
-        temperature=req.temperature,
-    )
-
-    explanation = explain_action(side, best_action)
-
-    # Firestore에 RL 결정 로그 저장
-    log_rl_decision(
-        game_id=req.game_id,
-        side=side,
-        state=state_copy,
-        action=best_action,
-        policy=policy,
-        explanation=explanation,
-    )
-
-    return RlMoveResponse(
-        action=best_action,
-        policy=policy,
-        explanation=explanation,
-    )
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Startup ---
@@ -1282,6 +1289,7 @@ app = FastAPI(
     lifespan=lifespan, # <--- Add this
     servers=[{"url": "https://persian-incursion-api.onrender.com"}]
 )
+
 
 
 
