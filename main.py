@@ -114,8 +114,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Persian Incursion Strategy API",
     version="0.3.0",
-    lifespan=lifespan,
     description="Authoritative rules + action enumerator to bound MyGPT",
+    lifespan=lifespan,
     servers=[{"url": "https://persian-incursion-api.onrender.com"}]
 )
 
@@ -1224,7 +1224,3 @@ def ai_move(req: AIMoveRequest):
         "gpt_context": gpt_context,
         "done": done
     }
-
-
-
-
