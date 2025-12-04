@@ -1113,11 +1113,8 @@ from fastapi import Query
 
 @app.get("/episodes/{game_id}")
 def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
-    """
-    Return the last `limit` transitions for a given game_id.
-    MyGPT에서 tool call용으로 사용하기 좋게 설계.
-    """
-    # 1) Firestore 우선
+   
+    # 1) Firestore 
     if firestore_client is not None:
         try:
             steps_ref = (
@@ -1134,9 +1131,9 @@ def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
             return {"game_id": game_id, "steps": steps}
         except Exception as e:
             print(f"⚠ Firestore get_episode_logs failed for {game_id}: {e}")
-            # 실패하면 메모리 fallback
+            #  fallback
 
-    # 2) 메모리 fallback
+    # 2)  fallback
     steps = EPISODES.get(game_id, [])
     if limit and len(steps) > limit:
         steps = steps[-limit:]
@@ -1159,26 +1156,28 @@ class AIMoveResponse(BaseModel):
 
 @app.post("/ai_move", response_model=AIMoveResponse)
 def ai_move(req: AIMoveRequest):
-    if not ge:
+    if not ge: 
         raise HTTPException(500, "Engine not available.")
 
     # 1. Dynamic Side Detection
-    # 우선 요청에 side가 있으면 우선 사용, 없으면 state.turn.current_player에서 추론
-    raw_side = req.side or req.state.get("turn", {}).get("current_player", "israel")
-
-    # 문자열로 변환해서 정규화 테이블에 태움
-    target_side = _SIDE_NORMALIZE.get(str(raw_side), None)
+    target_side = req.side
     if not target_side:
-        raise HTTPException(400, f"Invalid side detected: {raw_side}")
+        target_side = req.state.get("turn", {}).get("current_player", "israel").lower()
+    
+    # Normalize side string
+    target_side = str(target_side).lower()
+    if target_side.startswith("i"):
+         if "s" in target_side[0:2]: target_side = "israel"
+         elif "r" in target_side[0:2]: target_side = "iran"
 
     # 2. Load the Correct Agent
     agent = AGENTS.get(target_side)
-    if not agent:
-        raise HTTPException(400, f"No agent configured for side: {target_side}")
+    if not agent: 
+        raise HTTPException(400, f"Invalid side detected: {target_side}")
 
     # 3. AI Thinking (MCTS)
     best_action, policy = agent.choose_action(copy.deepcopy(req.state))
-
+    
     # 4. Execute Move (Get New State)
     eng = ge.GameEngine()
     next_state, reward, done, info = eng.rl_step(
@@ -1188,14 +1187,15 @@ def ai_move(req: AIMoveRequest):
     )
 
     # 5. Log for Training (Firebase)
+    # --- MOVED UP: Now this will actually run! ---
     log_transition(
-        req.game_id,
-        req.state,
-        target_side,
-        best_action,
-        reward,
-        done,
-        info,
+        req.game_id, 
+        req.state, 
+        target_side, 
+        best_action, 
+        reward, 
+        done, 
+        info, 
         policy
     )
 
@@ -1204,11 +1204,11 @@ def ai_move(req: AIMoveRequest):
     dmg_map = next_state.get("target_damage_status", {})
     for target_name, damage_data in dmg_map.items():
         if isinstance(damage_data, dict):
-            if any(v.get("damage_boxes_hit", 0) > 0 for v in damage_data.values() if isinstance(v, dict)):
+             if any(v.get("damage_boxes_hit", 0) > 0 for v in damage_data.values() if isinstance(v, dict)):
                 threats.append(target_name)
 
     role_title = "IAF Commander" if target_side == "israel" else "IRGC Commander"
-
+    
     gpt_context = {
         "active_side": target_side,
         "narrative_role": role_title,
@@ -1224,5 +1224,6 @@ def ai_move(req: AIMoveRequest):
         "gpt_context": gpt_context,
         "done": done
     }
+
 
 
