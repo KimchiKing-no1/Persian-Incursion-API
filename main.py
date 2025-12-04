@@ -73,7 +73,6 @@ def log_transition(game_id, state, side, action, reward, done, info, policy=None
             )
             doc_ref.set(record)
         except Exception as e:
-            # Firestore 실패해도 게임은 계속 돌아가야 하므로 에러만 로그로 남김
             print(f"⚠ Firestore log_transition failed for {game_id}: {e}")
 
 
@@ -916,9 +915,31 @@ def root():
 def plan_suggest(req: EnumerateActionsRequest):
     if not req.state:
         raise HTTPException(status_code=422, detail="Missing 'state' object in request body.")
+    
+    # 1. Get the raw dict
     sdict = req.state.model_dump(by_alias=True)
+
+    # 2. FIX: Normalize the state structure (ensure 'turn' is a dict, resources exist)
+    # We reuse the normalization logic from ctx_from_state without calculating the full context
+    norm = _normalize_turn_and_resources(sdict)
+    
+    # 3. Apply the normalized values back to sdict so the engine doesn't crash
+    # If 'turn' was just an int, this replaces it with {"n": 1, ...}
+    sdict["turn"] = {
+        "turn_number": norm["turn_number"],
+        "current_player": norm["side"], # Ensure engine finds 'current_player'
+        "phase": norm["phase"]
+    }
+    # Ensure resources are set correctly
+    sdict["players"] = sdict.get("players", {})
+    for side in ("israel", "iran"):
+        sdict["players"].setdefault(side, {})["resources"] = norm["resources"].get(side, {"mp":0, "ip":0, "pp":0})
+
+    # 4. Now call derive actions with the safe dict
     actions = _derive_actions(sdict, req.side_to_move)
-    code = _side_code(req.side_to_move)      
+    
+
+    code = _side_code(req.side_to_move)           
     cs = _checksum(sdict)[:12]
     nonce = f"N-{cs}-{code}"
     _UNIVERSES[nonce] = {a.action_id: a for a in actions}
@@ -934,7 +955,6 @@ def plan_suggest(req: EnumerateActionsRequest):
         "state": sdict,
     }
     return {"nonce": nonce, "plan": plan}
-
 
 @app.get("/privacy")
 def privacy():
@@ -1204,3 +1224,4 @@ def ai_move(req: AIMoveRequest):
         "gpt_context": gpt_context,
         "done": done
     }
+
