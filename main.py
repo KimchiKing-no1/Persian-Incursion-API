@@ -931,7 +931,7 @@ def plan_suggest(req: EnumerateActionsRequest):
         "phase": norm["phase"]
     }
     # Ensure resources are set correctly
-    sdict["players"] = sdict.get("players", {})
+    sdict["players"] = sdict.get("players") or {}
     for side in ("israel", "iran"):
         sdict["players"].setdefault(side, {})["resources"] = norm["resources"].get(side, {"mp":0, "ip":0, "pp":0})
 
@@ -1224,4 +1224,5 @@ def ai_move(req: AIMoveRequest):
         "gpt_context": gpt_context,
         "done": done
     }
+
 
