@@ -342,6 +342,16 @@ class MCTSAgent:
 
         # ISRAEL STRATEGY
         if side == 'israel':
+            # --- PRIORITY 0: EMERGENCY OPINION RECOVERY ---
+            # If domestic opinion is crashing, don't bomb people (it risks backlash).
+            # Try to play a card or just Pass.
+            current_op = state.get("opinion", {}).get("domestic", {}).get("israel", 0)
+            if current_op < -5:
+                # Try to find a 'Play Card' action, as cards often heal opinion
+                cards = [a for a in legal if a['type'] == 'Play Card']
+                if cards: return self.rng.choice(cards)
+                # If no cards, Pass is safer than attacking
+                return {"type": "Pass"}
             # Priority 1: Airstrikes on Nuclear targets if resources allow
             strikes = [a for a in ops if a['type'] == 'Order Airstrike']
             if strikes:
@@ -353,7 +363,8 @@ class MCTSAgent:
                     return 1
                 strikes.sort(key=target_score, reverse=True)
                 return strikes[0]
-            
+            recon = [a for a in ops if a['type'] == 'Recon']
+            if recon: return recon[0]
             # Priority 2: Special Warfare to prep battlefield
             specwar = [a for a in ops if a['type'] == 'Order Special Warfare']
             if specwar:
@@ -361,6 +372,12 @@ class MCTSAgent:
 
         # IRAN STRATEGY
         if side == 'iran':
+            # PRIORITY 0: Regime Survival
+            current_op = state.get("opinion", {}).get("domestic", {}).get("iran", 0)
+            if current_op < -5:
+                cards = [a for a in legal if a['type'] == 'Play Card']
+                if cards: return self.rng.choice(cards)
+                return {"type": "Pass"}
             # Priority 1: Ballistic Missile retaliation
             bms = [a for a in ops if a['type'] == 'Order Ballistic Missile']
             if bms:
@@ -395,12 +412,35 @@ class MCTSAgent:
                     d = dam if isinstance(dam, int) else dam.get("damage_boxes_hit", 0)
                     score += (d * 0.1) # 0.1 points per box of nuclear damage
 
-        # 2. Opinion Tracks
+        # 2. Opinion Tracks (POLITICAL SURVIVAL IS CRITICAL)
         dom = state.get("opinion", {}).get("domestic", {})
-        score += (dom.get("israel", 0) * 0.05)
-        score -= (dom.get("iran", 0) * 0.05)
+        isr_dom = float(dom.get("israel", 0))
+        irn_dom = float(dom.get("iran", 0))
+
+        # Base Weight (Higher than before)
+        score += (isr_dom * 0.1)
+        score -= (irn_dom * 0.1)
+
+        # --- DANGER ZONE LOGIC ---
+        # If Israel is near collapse (<= -6), apply MASSIVE penalties.
+        # This forces the AI to prioritize "Pass" or healing cards over risky attacks.
+        if isr_dom <= -6: score -= 0.5 
+        if isr_dom <= -8: score -= 1.5  # Panic mode: Do not do anything risky!
+        
+        # If Iran is near collapse (+6 or higher is usually bad for Iran regime), reward it
+        if irn_dom >= 6: score += 0.3
+        # --- ADD THIS: Resource Hoarding ---
+        # AI should prefer states where it has MORE resources left
+        isr_res = state['players']['israel']['resources']
+        score += (isr_res['mp'] + isr_res['ip'] + isr_res['pp']) * 0.01
+
+        # --- ADD THIS: Aircraft Survival (Crucial for Israel) ---
+        # If Israel loses planes, massive penalty
+        losses = state.get("losses", {})
+        score -= (losses.get("israel_aircraft", 0) * 0.15) 
 
         return max(-1.0, min(1.0, score))
+
 
     # ----------------------------------------------------------------------
     # H E L P E R S
@@ -447,7 +487,7 @@ class MCTSAgent:
             return self.engine.get_legal_actions(state)
         except Exception as e:
             if self.strict:
-                # 디버그 모드: 조용히 죽지 말고 바로 터뜨리기
+                
                 raise
             if self.verbose:
                 print(f"[MCTS] WARNING: get_legal_actions failed, falling back to Pass. Error: {e}")
@@ -464,17 +504,11 @@ class MCTSAgent:
             return state
 
     def _state_key(self, state):
-        """
-        Create a unique hash for the state to use in Transposition Tables.
-
-        - Strip RNG + logs (비결정적 / 디버그용)
-        - active_events_queue 는 '정규화(canonicalize)' 해서 포함
-          → 같은 이벤트 세트면 순서 달라도 동일 key
-        """
+        
         def _canon_event(ev: Any) -> Any:
             if not isinstance(ev, dict):
                 return ev
-            # 불필요한 로그용 필드 있으면 여기서 빼도 됨
+            
             return {k: ev[k] for k in sorted(ev.keys())}
 
         clean = {}
