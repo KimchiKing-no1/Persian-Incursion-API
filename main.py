@@ -8,7 +8,8 @@ from pydantic import BaseModel, Field, ConfigDict
 from fastapi.openapi.utils import get_openapi
 from contextlib import asynccontextmanager
 from features import load_action_map, save_action_map
-
+import firebase_admin
+from firebase_admin import credentials, firestore
 import time
 from game_engine import GameEngine
 from mcts import MCTSAgent
@@ -34,7 +35,39 @@ if FIREBASE_PROJECT_ID and FIREBASE_CREDENTIALS_JSON:
 else:
     print("ℹ Firestore env vars not set; logs only kept in memory.")
 
+def log_debug_input(game_id: str, side: str, state: dict):
+    """Step B: Logs RAW input immediately."""
+    if firestore_client is None: return
+    try:
+        # Create a timestamp-based ID so we can sort them easily
+        timestamp = str(int(time.time() * 1000)) 
+        firestore_client.collection("debug_logs").document(game_id)\
+            .collection("inputs").document(timestamp).set({
+                "timestamp": firestore.SERVER_TIMESTAMP,
+                "side_requested": side,
+                "state": state
+            })
+    except Exception as e:
+        print(f"⚠ Debug Input Log Failed: {e}")
 
+def log_debug_output(game_id: str, action: dict, gpt_context: dict, error: str = None):
+    """Step D/F: Logs output or errors."""
+    if firestore_client is None: return
+    try:
+        timestamp = str(int(time.time() * 1000))
+        payload = {
+            "timestamp": firestore.SERVER_TIMESTAMP,
+            "action": action or {},
+            "gpt_context": gpt_context or {},
+        }
+        if error:
+            payload["error"] = error
+            
+        firestore_client.collection("debug_logs").document(game_id)\
+            .collection("outputs").document(timestamp).set(payload)
+    except Exception as e:
+        print(f"⚠ Debug Output Log Failed: {e}")
+# -------------------------------------
 
 def log_transition(game_id, state, side, action, reward, done, info, policy=None):
     """
@@ -1159,35 +1192,51 @@ def ai_move(req: AIMoveRequest):
     if not ge: 
         raise HTTPException(500, "Engine not available.")
 
-    # 1. Dynamic Side Detection
+    # 1. Dynamic Side Detection (Keep your existing code here)
     target_side = req.side
     if not target_side:
         target_side = req.state.get("turn", {}).get("current_player", "israel").lower()
     
-    # Normalize side string
     target_side = str(target_side).lower()
     if target_side.startswith("i"):
          if "s" in target_side[0:2]: target_side = "israel"
          elif "r" in target_side[0:2]: target_side = "iran"
 
-    # 2. Load the Correct Agent
+    # --- CHANGE 1: INSERT LOGGING HERE (Step B) ---
+    # This runs BEFORE the AI thinks. If MCTS crashes, you still have this log.
+    log_debug_input(req.game_id, target_side, req.state) 
+    # ----------------------------------------------
+
+    # 2. Load Agent (Keep existing code)
     agent = AGENTS.get(target_side)
     if not agent: 
         raise HTTPException(400, f"Invalid side detected: {target_side}")
 
-    # 3. AI Thinking (MCTS)
-    best_action, policy = agent.choose_action(copy.deepcopy(req.state))
-    
-    # 4. Execute Move (Get New State)
-    eng = ge.GameEngine()
-    next_state, reward, done, info = eng.rl_step(
-        copy.deepcopy(req.state),
-        best_action,
-        side=target_side,
-    )
+    # --- CHANGE 2: WRAP "THINKING" IN TRY/EXCEPT (Step C) ---
+    try:
+        # 3. AI Thinking (Keep existing code)
+        best_action, policy = agent.choose_action(copy.deepcopy(req.state))
+        
+        # 4. Execute Move (Keep existing code)
+        eng = ge.GameEngine()
+        next_state, reward, done, info = eng.rl_step(
+            copy.deepcopy(req.state),
+            best_action,
+            side=target_side,
+        )
+    except Exception as e:
+        # --- CRITICAL ERROR CATCH ---
+        error_msg = f"AI Crash detected: {str(e)}"
+        print(error_msg) # Shows in your server console
+        
+        # Log the error to Firebase so you can see it
+        log_debug_output(req.game_id, {}, {}, error=error_msg)
+        
+        # Stop here and tell the user (MyGPT) something went wrong
+        raise HTTPException(500, detail=error_msg)
+    # ---------------------------------------------------------
 
-    # 5. Log for Training (Firebase)
-    # --- MOVED UP: Now this will actually run! ---
+    # 5. Log for Training (Keep existing code, this is your Step D for RL)
     log_transition(
         req.game_id, 
         req.state, 
@@ -1199,7 +1248,7 @@ def ai_move(req: AIMoveRequest):
         policy
     )
 
-    # 6. Generate Context for MyGPT
+    # 6. Generate Context (Keep existing code)
     threats = []
     dmg_map = next_state.get("target_damage_status", {})
     for target_name, damage_data in dmg_map.items():
@@ -1218,9 +1267,14 @@ def ai_move(req: AIMoveRequest):
         "game_over": done
     }
 
+    # --- CHANGE 3: LOG SUCCESSFUL OUTPUT (Step F) ---
+    log_debug_output(req.game_id, best_action, gpt_context)
+    # -----------------------------------------------
+
     return {
         "action": best_action,
         "new_state": next_state,
         "gpt_context": gpt_context,
         "done": done
     }
+
