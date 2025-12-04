@@ -92,8 +92,8 @@ except Exception:
 ENGINE = GameEngine()
 
 AGENTS: Dict[str, MCTSAgent] = {
-    "israel": MCTSAgent(ENGINE, "israel", simulations=400, strict=True, reuse_tree=True),
-    "iran":   MCTSAgent(ENGINE, "iran",   simulations=400, strict=True, reuse_tree=True),
+    "israel": MCTSAgent(ENGINE, "israel", simulations=1000, strict=True, reuse_tree=True),
+    "iran":   MCTSAgent(ENGINE, "iran",   simulations=1000, strict=True, reuse_tree=True),
 }
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -1224,6 +1224,7 @@ def ai_move(req: AIMoveRequest):
         "gpt_context": gpt_context,
         "done": done
     }
+
 
 
 
