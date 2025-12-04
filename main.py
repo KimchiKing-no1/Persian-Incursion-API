@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from fastapi.openapi.utils import get_openapi
 from contextlib import asynccontextmanager
 from features import load_action_map, save_action_map
-import firebase_admin
+
 
 import time
 from game_engine import GameEngine
@@ -91,10 +91,10 @@ def log_transition(game_id, state, side, action, reward, done, info, policy=None
         "policy": policy or {},
     }
 
-    # 1) 메모리에 저장
+    # 1) 
     EPISODES[game_id].append(record)
 
-    # 2) Firestore에 저장 (있으면)
+    # 2) 
     if firestore_client is not None:
         try:
             doc_ref = (
@@ -175,7 +175,7 @@ PHASE_MAP = {"m": "morning", "a": "afternoon", "n": "night",
 SIDE_MAP  = {"I": "israel", "i": "israel", "R": "iran", "r": "iran",
              "israel": "israel", "iran": "iran"}
 
-from typing import Any, Dict  # 이미 있을 거지만, Any가 꼭 있어야 함
+from typing import Any, Dict  
 
 _SIDE_NORMALIZE = {
     "I": "israel", "i": "israel", "Israel": "israel",
@@ -1277,5 +1277,6 @@ def ai_move(req: AIMoveRequest):
         "gpt_context": gpt_context,
         "done": done
     }
+
 
 
