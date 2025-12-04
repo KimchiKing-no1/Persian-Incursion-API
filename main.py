@@ -11,7 +11,9 @@ from features import load_action_map, save_action_map
 import time
 from game_engine import GameEngine
 from mcts import MCTSAgent
+from google.cloud import firestore as _firestore_mod
 EPISODES: Dict[str, List[dict]] = {}
+
 
 # ---------- Firestore client (optional) ----------
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID")
@@ -450,7 +452,8 @@ class EnumerateActionsRequest(AllowExtraModel):
     state: GameState
     side_to_move: Optional[str] = "Israel"
     max_actions: Optional[int] = 60
-
+    game_id: Optional[str] = "debug"
+    
 class EnumeratedAction(AllowExtraModel):
     action_id: str
     kind: str
@@ -985,7 +988,33 @@ def plan_suggest(req: EnumerateActionsRequest):
         "steps": [{"action_id": a.action_id, "rationale": a.description} for a in picks],
         "state": sdict,
     }
+
+    
+    if firestore_client is not None:
+        try:
+            gid = req.game_id or "debug"
+            ts_id = str(int(time.time() * 1000))  
+            firestore_client.collection("plan_suggest_logs")\
+                .document(gid)\
+                .collection("calls")\
+                .document(ts_id)\
+                .set(
+                    {
+                        "timestamp": firestore.SERVER_TIMESTAMP,
+                        "side_to_move": req.side_to_move,
+                        "turn_number": norm["turn_number"],
+                        "phase": norm["phase"],
+                        "actions_count": len(actions),
+                        "chosen_action_ids": [a.action_id for a in picks],
+                        "state_checksum": cs,
+                    }
+                )
+        except Exception as e:
+            print(f"⚠ Firestore plan_suggest log failed: {e}")
+    # ---------------------------------------------
+
     return {"nonce": nonce, "plan": plan}
+
 
 @app.get("/privacy")
 def privacy():
@@ -1275,6 +1304,22 @@ def ai_move(req: AIMoveRequest):
         "gpt_context": gpt_context,
         "done": done
     }
+
+@app.get("/debug/test_firestore")
+def debug_test_firestore():
+    if firestore_client is None:
+        return {"ok": False, "error": "firestore_client is None (env or credentials missing)"}
+
+    try:
+        firestore_client.collection("debug_test").document("ping").set(
+            {
+                "msg": "hello from render",
+                "ts": _firestore_mod.SERVER_TIMESTAMP,
+            }
+        )
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 
