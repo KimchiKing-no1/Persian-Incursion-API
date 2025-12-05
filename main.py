@@ -1140,110 +1140,113 @@ def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
         steps = steps[-limit:]
     return {"game_id": game_id, "steps": steps}
 
-
-# --- Update these models in main.py ---
-
-class AIMoveRequest(BaseModel):
-    game_id: str = "default_game"
-    # Make side Optional so the API detects it from the JSON state
-    side: Optional[str] = None 
-    state: Dict[str, Any]
-
-class AIMoveResponse(BaseModel):
-    action: Dict[str, Any]
-    new_state: Dict[str, Any]
-    gpt_context: Dict[str, Any] # <--- The "Brain" for MyGPT
-    done: bool
-
-@app.post("/ai_move", response_model=AIMoveResponse)
-def ai_move(req: AIMoveRequest):
-    if not ge: 
+def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
+    if not ge:
         raise HTTPException(500, "Engine not available.")
 
-    # 1. Dynamic Side Detection (Keep your existing code here)
-    target_side = req.side
+    # --- ---
+    target_side = side
     if not target_side:
-        target_side = req.state.get("turn", {}).get("current_player", "israel").lower()
-    
+        target_side = state.get("turn", {}).get("current_player", "israel").lower()
+
     target_side = str(target_side).lower()
     if target_side.startswith("i"):
-         if "s" in target_side[0:2]: target_side = "israel"
-         elif "r" in target_side[0:2]: target_side = "iran"
+        if "s" in target_side[0:2]:
+            target_side = "israel"
+        elif "r" in target_side[0:2]:
+            target_side = "iran"
 
-    # --- CHANGE 1: INSERT LOGGING HERE (Step B) ---
-    # This runs BEFORE the AI thinks. If MCTS crashes, you still have this log.
-    log_debug_input(req.game_id, target_side, req.state) 
-    # ----------------------------------------------
+    # 
+    log_debug_input(game_id, target_side, state)
 
-    # 2. Load Agent (Keep existing code)
     agent = AGENTS.get(target_side)
-    if not agent: 
+    if not agent:
         raise HTTPException(400, f"Invalid side detected: {target_side}")
 
-    # --- CHANGE 2: WRAP "THINKING" IN TRY/EXCEPT (Step C) ---
     try:
-        # 3. AI Thinking (Keep existing code)
-        best_action, policy = agent.choose_action(copy.deepcopy(req.state))
-        
-        # 4. Execute Move (Keep existing code)
+        # 
+        best_action, policy = agent.choose_action(copy.deepcopy(state))
+
+        # 
         eng = ge.GameEngine()
         next_state, reward, done, info = eng.rl_step(
-            copy.deepcopy(req.state),
+            copy.deepcopy(state),
             best_action,
             side=target_side,
         )
     except Exception as e:
-        # --- CRITICAL ERROR CATCH ---
         error_msg = f"AI Crash detected: {str(e)}"
-        print(error_msg) # Shows in your server console
-        
-        # Log the error to Firebase so you can see it
-        log_debug_output(req.game_id, {}, {}, error=error_msg)
-        
-        # Stop here and tell the user (MyGPT) something went wrong
+        print(error_msg)
+        log_debug_output(game_id, {}, {}, error=error_msg)
         raise HTTPException(500, detail=error_msg)
-    # ---------------------------------------------------------
 
-    # 5. Log for Training (Keep existing code, this is your Step D for RL)
+    # 
     log_transition(
-        req.game_id, 
-        req.state, 
-        target_side, 
-        best_action, 
-        reward, 
-        done, 
-        info, 
-        policy
+        game_id,
+        state,
+        target_side,
+        best_action,
+        reward,
+        done,
+        info,
+        policy,
     )
 
-    # 6. Generate Context (Keep existing code)
+    # 
     threats = []
     dmg_map = next_state.get("target_damage_status", {})
     for target_name, damage_data in dmg_map.items():
         if isinstance(damage_data, dict):
-             if any(v.get("damage_boxes_hit", 0) > 0 for v in damage_data.values() if isinstance(v, dict)):
+            if any(v.get("damage_boxes_hit", 0) > 0 for v in damage_data.values() if isinstance(v, dict)):
                 threats.append(target_name)
 
     role_title = "IAF Commander" if target_side == "israel" else "IRGC Commander"
-    
+
     gpt_context = {
         "active_side": target_side,
         "narrative_role": role_title,
         "move_description": f"Executing {best_action.get('type')} against {best_action.get('target', 'unknown target')}.",
         "strategic_reasoning": "MCTS simulations indicate this move maximizes long-term strategic advantage.",
         "critical_alerts": threats[:3],
-        "game_over": done
+        "game_over": done,
     }
 
-    # --- CHANGE 3: LOG SUCCESSFUL OUTPUT (Step F) ---
-    log_debug_output(req.game_id, best_action, gpt_context)
-    # -----------------------------------------------
+    # 
+    log_debug_output(game_id, best_action, gpt_context)
 
+    return best_action, next_state, gpt_context, done
+
+class AIStateOnlyResponse(BaseModel):
+    action: Dict[str, Any]
+    state: Dict[str, Any]      
+    gpt_context: Dict[str, Any]
+    done: bool
+
+@app.post(
+    "/ai_move",
+    response_model=AIStateOnlyResponse,
+    summary="RL/MCTS move with raw game-state JSON",
+    description=(
+        "Request body = full Persian Incursion game state JSON (same format as 11.json). "
+        "Response returns the chosen action and the UPDATED game state JSON under 'state', "
+        "plus explanation context for MyGPT."
+    ),
+)
+def ai_move(
+    
+    state: Dict[str, Any] = Body(..., embed=False),
+    game_id: str = Query("default_game", description="Episode/game id for RL logging"),
+    side: Optional[str] = Query(None, description="Side to move; if omitted, detect from state.turn.current_player"),
+):
+    best_action, next_state, gpt_context, done = run_ai_move_core(
+        game_id, side, state
+    )
     return {
         "action": best_action,
-        "new_state": next_state,
+        "state": next_state,       
         "gpt_context": gpt_context,
-        "done": done
+        "done": done,
     }
+
 
 
