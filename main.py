@@ -11,6 +11,7 @@ from features import load_action_map, save_action_map
 import time
 from game_engine import GameEngine
 from mcts import MCTSAgent
+from fastapi import Query
 EPISODES: Dict[str, List[dict]] = {}
 
 # ---------- Firestore client (optional) ----------
@@ -1111,46 +1112,6 @@ def plan_execute(req: NoncedPlan):
         "state": new_state  # <-- feed this straight back into the human->MyGPT loop
     }
 
-@app.post(
-    "/ai_move",
-    response_model=AIMoveResponse,
-    summary="Main RL/MCTS move: choose optimal action and return updated game state",
-    description=(
-        "Given a full Persian Incursion game state JSON, run the RL+MCTS agent for the side to move, "
-        "select the best action, simulate it with the game engine, log the transition to Firestore, "
-        "and return the new state plus explanation context for the LLM."
-    ),
-)
-def turn_ai_move(req: EnumerateActionsRequest):
-    sdict = req.state.model_dump(by_alias=True)
-    actions = _derive_actions(sdict, req.side_to_move)
-    if not actions:
-        raise HTTPException(422, "No legal actions for this side/phase")
-
-    picks = [a for a in actions if a.kind == "AirStrike"][:2]
-    recon = next((a for a in actions if a.kind == "Recon"), None)
-    if recon: picks.append(recon)
-    if not picks:
-        picks = actions[:min(3, len(actions))]
-
-    code = _side_code(req.side_to_move)           
-    cs = _checksum(sdict)[:12]
-    nonce = f"N-{cs}-{code}"
-    _UNIVERSES[nonce] = {a.action_id: a for a in actions}
-
-    plan = {"objective": "AI best guess",
-            "steps": [{"action_id": a.action_id} for a in picks],
-            "state": sdict}
-    plan_req = NoncedPlan(nonce=nonce, plan=Plan(**plan))
-
-    v = plan_validate(plan_req)
-    if not v["ok"]:
-        raise HTTPException(422, f"Plan invalid: {v}")
-
-    exec_out = plan_execute(plan_req)
-    return {"nonce": nonce, "chosen_steps": [s["action_id"] for s in plan["steps"]], "result": exec_out}
-from fastapi import Query
-
 @app.get("/episodes/{game_id}")
 def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
    
@@ -1284,4 +1245,5 @@ def ai_move(req: AIMoveRequest):
         "gpt_context": gpt_context,
         "done": done
     }
+
 
