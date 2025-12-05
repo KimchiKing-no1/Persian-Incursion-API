@@ -68,20 +68,7 @@ class Node:
     def _current_player_side(self) -> str:
         return self.state.get("turn", {}).get("current_player", "israel").lower()
 
-def _fast_copy(self, state):
-    # Only copy mutable game data. 
-    # Do NOT deepcopy the entire 'rules' dictionary (it is static and huge).
-    new_state = {
-        "turn": state.get("turn", {}).copy(),
-        "players": copy.deepcopy(state.get("players", {})), # Resources/Cards need deepcopy
-        "opinion": copy.deepcopy(state.get("opinion", {})),
-        "target_damage_status": copy.deepcopy(state.get("target_damage_status", {})),
-        "squadrons": copy.deepcopy(state.get("squadrons", {})),
-        # Reference immutable rules instead of copying
-        "rules": state.get("rules"), 
-        "_rng": state.get("_rng") # Pass RNG reference or re-seed
-    }
-    return new_state
+
 # ============================== A G E N T ====================================
 
 class MCTSAgent:
@@ -114,7 +101,6 @@ class MCTSAgent:
 
         self._last_root: Optional[Node] = None
         self._transpo: Dict[str, Node] = {}
-
         # --- Load RL Model ---
         self.pv_model = None
         if model_path and RL_AVAILABLE:
@@ -124,7 +110,8 @@ class MCTSAgent:
                 if self.verbose: print(f"[MCTS] Expert Mode: RL Model Loaded from {model_path}")
             except Exception as e:
                 print(f"[MCTS] WARNING: RL load failed ({e}). Using Expert Heuristic Mode.")
-
+    def _fast_copy(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        return copy.deepcopy(state)
     # ----------------------------------------------------------------------
     # P U B L I C   A P I
     # ----------------------------------------------------------------------
