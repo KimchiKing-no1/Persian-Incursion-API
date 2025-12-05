@@ -942,7 +942,7 @@ def root():
     }
 
 # main.py
-@app.post("/plan/suggest")
+@app.post("/plan/suggest", include_in_schema=False)
 def plan_suggest(req: EnumerateActionsRequest):
     if not req.state:
         raise HTTPException(status_code=422, detail="Missing 'state' object in request body.")
@@ -1001,7 +1001,7 @@ def terms():
     <p>This API is for research and entertainment. Use at your own risk.</p>
     """)
 
-@app.post("/plan/execute")
+@app.post("/plan/execute", include_in_schema=False)
 def plan_execute(req: NoncedPlan):
     """
     Apply a validated plan to the provided state and return the NEW state
@@ -1111,7 +1111,16 @@ def plan_execute(req: NoncedPlan):
         "state": new_state  # <-- feed this straight back into the human->MyGPT loop
     }
 
-@app.post("/turn/ai_move")
+@app.post(
+    "/ai_move",
+    response_model=AIMoveResponse,
+    summary="Main RL/MCTS move: choose optimal action and return updated game state",
+    description=(
+        "Given a full Persian Incursion game state JSON, run the RL+MCTS agent for the side to move, "
+        "select the best action, simulate it with the game engine, log the transition to Firestore, "
+        "and return the new state plus explanation context for the LLM."
+    ),
+)
 def turn_ai_move(req: EnumerateActionsRequest):
     sdict = req.state.model_dump(by_alias=True)
     actions = _derive_actions(sdict, req.side_to_move)
@@ -1275,3 +1284,4 @@ def ai_move(req: AIMoveRequest):
         "gpt_context": gpt_context,
         "done": done
     }
+
