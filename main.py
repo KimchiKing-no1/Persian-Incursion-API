@@ -261,6 +261,32 @@ def _normalize_turn_and_resources(state: Dict[str, Any]) -> Dict[str, Any]:
         "resources": resources,
     }
 
+def _ensure_players_block(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Ensure state['players'] exists and each side has basic resources.
+    This lets MCTS/GameEngine safely use state['players'][side]['resources'].
+    """
+    norm = _normalize_turn_and_resources(state)
+
+    # 1) 
+    players = state.get("players")
+    if not isinstance(players, dict):
+        players = {}
+        state["players"] = players
+
+    # 2)
+    for side in ("israel", "iran"):
+        ps = players.setdefault(side, {})
+        res = ps.get("resources")
+        if not isinstance(res, dict):
+            res = {}
+            ps["resources"] = res
+
+        base = norm["resources"].get(side, {"pp": 0.0, "ip": 0.0, "mp": 0.0})
+        for k in ("pp", "ip", "mp"):
+            res.setdefault(k, float(base.get(k, 0.0)))
+
+    return state
 
 # ---------- Helpers ----------
 
@@ -1144,10 +1170,14 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
     if not ge:
         raise HTTPException(500, "Engine not available.")
 
-    # --- ---
+
+    work_state = copy.deepcopy(state)
+    work_state = _ensure_players_block(work_state)
+
+    # --- side detection ---
     target_side = side
     if not target_side:
-        target_side = state.get("turn", {}).get("current_player", "israel").lower()
+        target_side = work_state.get("turn", {}).get("current_player", "israel").lower()
 
     target_side = str(target_side).lower()
     if target_side.startswith("i"):
@@ -1156,21 +1186,20 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         elif "r" in target_side[0:2]:
             target_side = "iran"
 
-    # 
-    log_debug_input(game_id, target_side, state)
+
+    log_debug_input(game_id, target_side, work_state)
 
     agent = AGENTS.get(target_side)
     if not agent:
         raise HTTPException(400, f"Invalid side detected: {target_side}")
 
     try:
-        # 
-        best_action, policy = agent.choose_action(copy.deepcopy(state))
+        
+        best_action, policy = agent.choose_action(copy.deepcopy(work_state))
 
-        # 
         eng = ge.GameEngine()
         next_state, reward, done, info = eng.rl_step(
-            copy.deepcopy(state),
+            copy.deepcopy(work_state),
             best_action,
             side=target_side,
         )
@@ -1180,10 +1209,10 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         log_debug_output(game_id, {}, {}, error=error_msg)
         raise HTTPException(500, detail=error_msg)
 
-    # 
+    
     log_transition(
         game_id,
-        state,
+        work_state,
         target_side,
         best_action,
         reward,
@@ -1192,7 +1221,7 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         policy,
     )
 
-    # 
+ 
     threats = []
     dmg_map = next_state.get("target_damage_status", {})
     for target_name, damage_data in dmg_map.items():
@@ -1211,7 +1240,6 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         "game_over": done,
     }
 
-    # 
     log_debug_output(game_id, best_action, gpt_context)
 
     return best_action, next_state, gpt_context, done
@@ -1247,6 +1275,7 @@ def ai_move(
         "gpt_context": gpt_context,
         "done": done,
     }
+
 
 
 
