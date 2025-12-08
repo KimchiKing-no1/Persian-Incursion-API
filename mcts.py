@@ -484,8 +484,12 @@ class MCTSAgent:
 
     def _legal_actions(self, state: Dict[str, Any]) -> List[Dict[str, Any]]:
         try:
-            
-            return self.engine.get_legal_actions(state)
+            # Prefer explicit side; fall back to state.turn.current_player
+            side = self.side
+            turn_side = (state.get("turn") or {}).get("current_player")
+            if isinstance(turn_side, str):
+                side = turn_side.lower()
+            return self.engine.get_legal_actions(state, side=side)
         except Exception as e:
             if self.strict:
                 raise
@@ -495,6 +499,7 @@ class MCTSAgent:
                     f"falling back to Pass. Error: {e}"
                 )
             return [{"type": "Pass"}]
+
 
     def _safe_apply(self, state: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
         try:
