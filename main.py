@@ -1212,22 +1212,23 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
     if not ge:
         raise HTTPException(500, "Engine not available.")
 
+    # 0) Preserve the original 11.json-style state
+    base_state = copy.deepcopy(state)
 
-    work_state = copy.deepcopy(state)
+    # 1) Internal working state: add players/resources, etc.
+    work_state = copy.deepcopy(base_state)
     work_state = _ensure_players_block(work_state)
 
-    # --- side detection ---
+    # 2) Detect side
     target_side = side
     if not target_side:
         target_side = work_state.get("turn", {}).get("current_player", "israel").lower()
-
     target_side = str(target_side).lower()
     if target_side.startswith("i"):
         if "s" in target_side[0:2]:
             target_side = "israel"
         elif "r" in target_side[0:2]:
             target_side = "iran"
-
 
     log_debug_input(game_id, target_side, work_state)
 
@@ -1236,33 +1237,29 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         raise HTTPException(400, f"Invalid side detected: {target_side}")
 
     try:
-        
         best_action, policy = agent.choose_action(copy.deepcopy(work_state))
 
         eng = ge.GameEngine()
-        
-        # Apply the chosen action to the full PI state, same as MCTS tree
-        next_state = eng.apply_action(copy.deepcopy(work_state), best_action, side=target_side)
-        
-        # For the Strategist we don’t really need RL rewards; use placeholders
+        # Apply action on a full copy of the working state
+        full_state_after = eng.apply_action(copy.deepcopy(work_state), best_action, side=target_side)
+
         reward = 0.0
-        done = bool(eng.is_game_over(next_state)) if hasattr(eng, "is_game_over") else False
+        done = bool(eng.is_game_over(full_state_after)) if hasattr(eng, "is_game_over") else False
         info = {}
 
     except Exception as e:
         error_msg = f"AI Crash detected: {str(e)}"
         print(error_msg)
-        log_debug_output(
-            game_id=game_id,
-            action={},
-            gpt_context={},
-            state_before=work_state,
-            state_after=None,
-            error=error_msg,
-        )
+        log_debug_output(game_id, {}, {}, error=error_msg)
         raise HTTPException(500, detail=error_msg)
 
-    
+    # 3) Project back to compact (11.json-like) state for external API
+    next_state_compact = _project_engine_state_back_to_compact(
+        base_state=base_state,
+        full_state=full_state_after,
+    )
+
+    # 4) RL-style logging using full_state_after
     log_transition(
         game_id,
         work_state,
@@ -1274,12 +1271,15 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         policy,
     )
 
- 
     threats = []
-    dmg_map = next_state.get("target_damage_status", {})
+    dmg_map = full_state_after.get("target_damage_status", {})
     for target_name, damage_data in dmg_map.items():
         if isinstance(damage_data, dict):
-            if any(v.get("damage_boxes_hit", 0) > 0 for v in damage_data.values() if isinstance(v, dict)):
+            if any(
+                v.get("damage_boxes_hit", 0) > 0
+                for v in damage_data.values()
+                if isinstance(v, dict)
+            ):
                 threats.append(target_name)
 
     role_title = "IAF Commander" if target_side == "israel" else "IRGC Commander"
@@ -1293,16 +1293,10 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         "game_over": done,
     }
 
-    # NEW: log both before/after states (pretty JSON stored by log_debug_output)
-    log_debug_output(
-        game_id=game_id,
-        action=best_action,
-        gpt_context=gpt_context,
-        state_before=work_state,
-        state_after=next_state,
-    )
+    log_debug_output(game_id, best_action, gpt_context, state_before=work_state, state_after=full_state_after)
 
-    return best_action, next_state, gpt_context, done
+    return best_action, next_state_compact, gpt_context, done
+
 
 class AIStateOnlyResponse(BaseModel):
     action: Dict[str, Any]
@@ -1335,6 +1329,78 @@ def ai_move(
         "gpt_context": gpt_context,
         "done": done,
     }
+def _project_engine_state_back_to_compact(
+    base_state: Dict[str, Any],
+    full_state: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Take:
+      - base_state: original 11.json-style state from the user/MyGPT
+      - full_state: engine-mutated state with players/log/victory_flags/etc.
+    Return:
+      - a state that keeps the 11.json structure but also carries new info.
+    """
+    compact = copy.deepcopy(base_state)
+
+    # 1) Mirror resources back into compact["r"]
+    if "players" in full_state:
+        compact_r = compact.get("r", {}) or {}
+        for side in ("israel", "iran"):
+            pres = (
+                full_state
+                .get("players", {})
+                .get(side, {})
+                .get("resources", {})
+            )
+            if pres:
+                side_r = compact_r.setdefault(side, {})
+                side_r["mp"] = float(pres.get("mp", 0))
+                side_r["ip"] = float(pres.get("ip", 0))
+                side_r["pp"] = float(pres.get("pp", 0))
+        compact["r"] = compact_r
+
+    # 2) Turn mapping: engine turn → compact turn
+    fturn = full_state.get("turn", {}) or {}
+    if fturn:
+        # 11.json uses "number", "side", "segment"
+        segment = fturn.get("phase") or fturn.get("segment") or "morning"
+        if segment in ("m", "a", "n"):
+            segment = {"m": "morning", "a": "afternoon", "n": "night"}[segment]
+
+        cur_player = fturn.get("current_player", compact.get("turn", {}).get("side", "Israel"))
+        side_name = "Israel" if str(cur_player).lower().startswith("i") else "Iran"
+
+        compact["turn"] = {
+            "number": int(fturn.get("turn_number", fturn.get("n", 1))),
+            "side": side_name,
+            "segment": segment.capitalize(),  # Morning/Afternoon/Night to match 11.json
+        }
+
+    # 3) Carry over opinion, damage, victory flags, events, log, etc.
+    for key in [
+        "opinion",
+        "target_damage_status",
+        "victory_flags",
+        "active_events_queue",
+        "losses",
+        "log",
+    ]:
+        if key in full_state:
+            compact[key] = full_state[key]
+
+    # 4) Keep air, targets & other original blocks from base_state unless engine replaced them
+    for key in ["as", "ti", "o", "meta", "rules", "oob"]:
+        if key in full_state:
+            compact[key] = full_state[key]
+        elif key in base_state and key not in compact:
+            compact[key] = base_state[key]
+
+    # 5) Optionally expose players as well (for debugging / RL)
+    if "players" in full_state:
+        compact["players"] = full_state["players"]
+
+    return compact
+
 
 
 
