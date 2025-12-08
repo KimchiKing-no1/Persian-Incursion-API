@@ -35,37 +35,73 @@ else:
     print("ℹ Firestore env vars not set; logs only kept in memory.")
 
 def log_debug_input(game_id: str, side: str, state: dict):
-    """Step B: Logs RAW input immediately."""
-    if firestore_client is None: return
-    try:
-        # Create a timestamp-based ID so we can sort them easily
-        timestamp = str(int(time.time() * 1000)) 
-        firestore_client.collection("debug_logs").document(game_id)\
-            .collection("inputs").document(timestamp).set({
-                "timestamp": firestore.SERVER_TIMESTAMP,
-                "side_requested": side,
-                "state": state
-            })
-    except Exception as e:
-        print(f"⚠ Debug Input Log Failed: {e}")
-
-def log_debug_output(game_id: str, action: dict, gpt_context: dict, error: str = None):
-    """Step D/F: Logs output or errors."""
-    if firestore_client is None: return
+    """Step B: Logs RAW input immediately (dict + pretty JSON text)."""
+    if firestore_client is None:
+        return
     try:
         timestamp = str(int(time.time() * 1000))
         payload = {
             "timestamp": firestore.SERVER_TIMESTAMP,
+            "side_requested": side,
+            
+            "state": state,
+           
+            "state_json": json.dumps(state, ensure_ascii=False, indent=2),
+        }
+        (
+            firestore_client.collection("debug_logs")
+            .document(game_id)
+            .collection("inputs")
+            .document(timestamp)
+            .set(payload)
+        )
+    except Exception as e:
+        print(f"⚠ Debug Input Log Failed: {e}")
+
+
+def log_debug_output(
+    game_id: str,
+    action: dict,
+    gpt_context: dict,
+    state_before: dict | None = None,
+    state_after: dict | None = None,
+    error: str | None = None,
+):
+    """Logs output (action + states) and errors into Firestore."""
+    if firestore_client is None:
+        return
+    try:
+        timestamp = str(int(time.time() * 1000))
+        payload: Dict[str, Any] = {
+            "timestamp": firestore.SERVER_TIMESTAMP,
             "action": action or {},
             "gpt_context": gpt_context or {},
         }
+
+        if state_before is not None:
+            payload["state_before"] = state_before
+            payload["state_before_json"] = json.dumps(
+                state_before, ensure_ascii=False, indent=2
+            )
+        if state_after is not None:
+            payload["state_after"] = state_after
+            payload["state_after_json"] = json.dumps(
+                state_after, ensure_ascii=False, indent=2
+            )
+
         if error:
             payload["error"] = error
-            
-        firestore_client.collection("debug_logs").document(game_id)\
-            .collection("outputs").document(timestamp).set(payload)
+
+        (
+            firestore_client.collection("debug_logs")
+            .document(game_id)
+            .collection("outputs")
+            .document(timestamp)
+            .set(payload)
+        )
     except Exception as e:
         print(f"⚠ Debug Output Log Failed: {e}")
+
 # -------------------------------------
 
 def log_transition(game_id, state, side, action, reward, done, info, policy=None):
@@ -1279,6 +1315,7 @@ def ai_move(
         "gpt_context": gpt_context,
         "done": done,
     }
+
 
 
 
