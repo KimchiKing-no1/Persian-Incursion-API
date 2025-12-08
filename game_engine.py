@@ -570,10 +570,26 @@ class GameEngine(OpsLoggingMixin):
     
     # ----------------------------- ACTION DISPATCH -----------------------------
     def get_legal_actions(self, state, side=None):
-        if state is None: raise ValueError("state=None")
+        if state is None:
+            raise ValueError("state=None")
+    
         side = side or state.get("turn", {}).get("current_player", "israel")
         self._ensure_player(state, side)
+    
         res = state["players"][side]["resources"]
+    
+        # --- 추가: r 에 값이 있는데 resources 가 0이면 r에서 한 번 더 가져오기 ---
+        if isinstance(state.get("r"), dict):
+            r_side = state["r"].get(side, {})
+            # 세 리소스가 전부 0이면서 r 에는 양수가 있을 때만 보정
+            if (
+                res.get("pp", 0) == 0 and res.get("ip", 0) == 0 and res.get("mp", 0) == 0
+                and any(float(r_side.get(k, 0)) > 0 for k in ("pp", "ip", "mp"))
+            ):
+                res["pp"] = float(r_side.get("pp", 0))
+                res["ip"] = float(r_side.get("ip", 0))
+                res["mp"] = float(r_side.get("mp", 0))
+    
         river = list(state["players"][side].get("river", []))
         actions = [{"type": "Pass"}]
 
