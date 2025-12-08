@@ -314,7 +314,9 @@ class MCTSAgent:
             if winner:
                 return 1.0 if winner == "israel" else -1.0
 
-            legal = self.engine.get_legal_actions(sim_state)
+            current_player = sim_state.get("turn", {}).get("current_player", "israel")
+            legal = self.engine.get_legal_actions(sim_state, side=current_player)
+
             if not legal:
                 break
 
