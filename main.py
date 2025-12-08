@@ -1246,7 +1246,14 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
     except Exception as e:
         error_msg = f"AI Crash detected: {str(e)}"
         print(error_msg)
-        log_debug_output(game_id, {}, {}, error=error_msg)
+        log_debug_output(
+            game_id=game_id,
+            action={},
+            gpt_context={},
+            state_before=work_state,
+            state_after=None,
+            error=error_msg,
+        )
         raise HTTPException(500, detail=error_msg)
 
     
@@ -1280,7 +1287,14 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         "game_over": done,
     }
 
-    log_debug_output(game_id, best_action, gpt_context)
+    # NEW: log both before/after states (pretty JSON stored by log_debug_output)
+    log_debug_output(
+        game_id=game_id,
+        action=best_action,
+        gpt_context=gpt_context,
+        state_before=work_state,
+        state_after=next_state,
+    )
 
     return best_action, next_state, gpt_context, done
 
@@ -1315,6 +1329,7 @@ def ai_move(
         "gpt_context": gpt_context,
         "done": done,
     }
+
 
 
 
