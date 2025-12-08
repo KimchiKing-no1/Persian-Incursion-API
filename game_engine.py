@@ -655,71 +655,71 @@ class GameEngine(OpsLoggingMixin):
         actions.append({"type": "End Impulse"})
         return actions
 
-    def apply_action(self, state: Dict[str, Any], action: Dict[str, Any], side: Optional[str] = None) -> Dict[str, Any]:
-            """
-            Single-step state transition for one high-level action.
-            This is what MCTS/RL should call.
-            """
-            if state is None or not isinstance(state, dict):
-                raise ValueError("state must be a dict")
-            if not isinstance(action, dict):
-                raise ValueError("action must be a dict")
-    
-            # We mutate in-place; callers (MCTS/RL) should deepcopy beforehand when needed.
-            s = state
-            turn = s.setdefault("turn", {})
-            acting_side = side or turn.get("current_player", "israel")
-            self._ensure_player(s, acting_side)
-    
-            a_type = action.get("type")
-            if not a_type:
-                raise ValueError(f"action is missing 'type': {action}")
-    
-            # -----------------------
-            # 1) PASS / END IMPULSE
-            # -----------------------
-            if a_type in ("Pass", "End Impulse"):
-                self._log(s, f"[ACTION] {acting_side}: {a_type}")
-                turn["consecutive_passes"] = int(turn.get("consecutive_passes", 0)) + 1
-                return self._advance_turn(s)
-    
-            # -----------------------
-            # 2) PLAY CARD
-            # -----------------------
-            if a_type == "Play Card":
-                card_id = action.get("card_id")
-                if card_id is None:
-                    raise ValueError("Play Card action must include 'card_id'")
-                return self._apply_play_card(s, acting_side, card_id, action)
-    
-            # -----------------------
-            # 3) OPS – AIRSTRIKE
-            # -----------------------
-            if a_type == "Order Airstrike":
 
-                return self._resolve_order_airstrike(s, action, do_advance=True)
+
+    def apply_action(
+        self,
+        state: Dict[str, Any],
+        action: Dict[str, Any],
+        side: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Single-step state transition for one high-level action.
+        IMPORTANT:
+        - Deep-copy the incoming state (11.json-like structure).
+        - Mutate only what changes.
+        - Return the full, updated structure.
+        """
+        if state is None or not isinstance(state, dict):
+            raise ValueError("state must be a dict")
+        if not isinstance(action, dict):
+            raise ValueError("action must be a dict")
     
-            # -----------------------
-            # 4) OPS – SPECIAL WARFARE
-            # -----------------------
-            if a_type == "Order Special Warfare":
-                return self._resolve_order_special_warfare(s, action, do_advance=True)
+        # Work on a full copy so the caller's state is not mutated.
+        s = copy.deepcopy(state)
     
-            # -----------------------
-            # 5) OPS – BALLISTIC MISSILE
-            # -----------------------
-            if a_type == "Order Ballistic Missile":
-                return self._resolve_order_ballistic_missile(s, action, do_advance=True)
+        turn = s.setdefault("turn", {})
+        acting_side = side or turn.get("current_player", "israel")
+        self._ensure_player(s, acting_side)
     
-            # -----------------------
-            # 6) OPS – TERROR ATTACK
-            # -----------------------
-            if a_type == "Order Terror Attack":
-                return self._resolve_order_terror_attack(s, action, do_advance=True)
+        a_type = action.get("type")
+        if not a_type:
+            raise ValueError(f"action is missing 'type': {action}")
     
-            self._log(s, f"[WARN] Unknown action type {a_type}; treating as Pass.")
+        # 1) PASS / END IMPULSE
+        if a_type in ("Pass", "End Impulse"):
+            self._log(s, f"[ACTION] {acting_side}: {a_type}")
             turn["consecutive_passes"] = int(turn.get("consecutive_passes", 0)) + 1
             return self._advance_turn(s)
+    
+        # 2) PLAY CARD
+        if a_type == "Play Card":
+            card_id = action.get("card_id")
+            if card_id is None:
+                raise ValueError("Play Card action must include 'card_id'")
+            return self._apply_play_card(s, acting_side, card_id, action)
+    
+        # 3) OPS – AIRSTRIKE
+        if a_type == "Order Airstrike":
+            return self._resolve_order_airstrike(s, action, do_advance=True)
+    
+        # 4) OPS – SPECIAL WARFARE
+        if a_type == "Order Special Warfare":
+            return self._resolve_order_special_warfare(s, action, do_advance=True)
+    
+        # 5) OPS – BALLISTIC MISSILE
+        if a_type == "Order Ballistic Missile":
+            return self._resolve_order_ballistic_missile(s, action, do_advance=True)
+    
+        # 6) OPS – TERROR ATTACK
+        if a_type == "Order Terror Attack":
+            return self._resolve_order_terror_attack(s, action, do_advance=True)
+    
+        # Fallback: treat unknown as Pass, but still on the full state
+        self._log(s, f"[WARN] Unknown action type {a_type}; treating as Pass.")
+        turn["consecutive_passes"] = int(turn.get("consecutive_passes", 0)) + 1
+        return self._advance_turn(s)
+
     
     # -------------------------- TURN MGMT --------------------------------------
     def _advance_turn(self, state):
