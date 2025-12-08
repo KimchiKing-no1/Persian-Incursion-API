@@ -298,19 +298,24 @@ def _normalize_turn_and_resources(state: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 def _ensure_players_block(state: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Ensure state['players'] exists and each side has basic resources.
-    This lets MCTS/GameEngine safely use state['players'][side]['resources'].
-    """
     norm = _normalize_turn_and_resources(state)
 
-    # 1) 
+    # --- FIX: ensure turn has current_player and phase ---
+    old_turn = state.get("turn") or state.get("t") or {}
+    # Preserve existing fields like consecutive_passes / per_impulse_card_played if they exist
+    turn = dict(old_turn)
+    turn.setdefault("turn_number", norm["turn_number"])
+    turn.setdefault("current_player", norm["side"])
+    turn.setdefault("phase", norm["phase"])
+    state["turn"] = turn
+    # -----------------------------------------------------
+
+    # 1) players...
     players = state.get("players")
     if not isinstance(players, dict):
         players = {}
         state["players"] = players
 
-    # 2)
     for side in ("israel", "iran"):
         ps = players.setdefault(side, {})
         res = ps.get("resources")
@@ -323,6 +328,7 @@ def _ensure_players_block(state: Dict[str, Any]) -> Dict[str, Any]:
             res.setdefault(k, float(base.get(k, 0.0)))
 
     return state
+
 
 # ---------- Helpers ----------
 
@@ -1329,6 +1335,7 @@ def ai_move(
         "gpt_context": gpt_context,
         "done": done,
     }
+
 
 
 
