@@ -298,36 +298,47 @@ def _normalize_turn_and_resources(state: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 def _ensure_players_block(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Ensure state['players'] exists and sync resources from compact `r` if present.
+    """
     norm = _normalize_turn_and_resources(state)
 
-    # --- FIX: ensure turn has current_player and phase ---
-    old_turn = state.get("turn") or state.get("t") or {}
-    # Preserve existing fields like consecutive_passes / per_impulse_card_played if they exist
-    turn = dict(old_turn)
-    turn.setdefault("turn_number", norm["turn_number"])
-    turn.setdefault("current_player", norm["side"])
-    turn.setdefault("phase", norm["phase"])
-    state["turn"] = turn
-    # -----------------------------------------------------
-
-    # 1) players...
     players = state.get("players")
     if not isinstance(players, dict):
         players = {}
         state["players"] = players
 
+
     for side in ("israel", "iran"):
         ps = players.setdefault(side, {})
+        base = norm["resources"].get(side, {"pp": 0.0, "ip": 0.0, "mp": 0.0})
+
         res = ps.get("resources")
         if not isinstance(res, dict):
             res = {}
             ps["resources"] = res
 
-        base = norm["resources"].get(side, {"pp": 0.0, "ip": 0.0, "mp": 0.0})
-        for k in ("pp", "ip", "mp"):
-            res.setdefault(k, float(base.get(k, 0.0)))
+       
+        res["pp"] = float(base.get("pp", 0.0))
+        res["ip"] = float(base.get("ip", 0.0))
+        res["mp"] = float(base.get("mp", 0.0))
+
+    
+    state["r"] = {
+        "israel": {
+            "pp": players["israel"]["resources"]["pp"],
+            "ip": players["israel"]["resources"]["ip"],
+            "mp": players["israel"]["resources"]["mp"],
+        },
+        "iran": {
+            "pp": players["iran"]["resources"]["pp"],
+            "ip": players["iran"]["resources"]["ip"],
+            "mp": players["iran"]["resources"]["mp"],
+        },
+    }
 
     return state
+
 
 
 # ---------- Helpers ----------
@@ -1400,6 +1411,7 @@ def _project_engine_state_back_to_compact(
         compact["players"] = full_state["players"]
 
     return compact
+
 
 
 
