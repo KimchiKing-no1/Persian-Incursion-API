@@ -1198,11 +1198,15 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         best_action, policy = agent.choose_action(copy.deepcopy(work_state))
 
         eng = ge.GameEngine()
-        next_state, reward, done, info = eng.rl_step(
-            copy.deepcopy(work_state),
-            best_action,
-            side=target_side,
-        )
+        
+        # Apply the chosen action to the full PI state, same as MCTS tree
+        next_state = eng.apply_action(copy.deepcopy(work_state), best_action, side=target_side)
+        
+        # For the Strategist we don’t really need RL rewards; use placeholders
+        reward = 0.0
+        done = bool(eng.is_game_over(next_state)) if hasattr(eng, "is_game_over") else False
+        info = {}
+
     except Exception as e:
         error_msg = f"AI Crash detected: {str(e)}"
         print(error_msg)
@@ -1275,6 +1279,7 @@ def ai_move(
         "gpt_context": gpt_context,
         "done": done,
     }
+
 
 
 
