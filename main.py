@@ -224,26 +224,32 @@ def _normalize_turn_and_resources(state: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(t, dict):
         t = {}
 
-    # Legacy fields
-    legacy_num = t.get("number")
+    # Legacy (compact) vs engine fields
+    legacy_num  = t.get("number")
     legacy_side = t.get("side")
-    legacy_seg = t.get("segment")
+    legacy_seg  = t.get("segment")
 
-    # Engine fields
-    eng_num = t.get("turn_number")
-    eng_side = t.get("current_player")
+    eng_num   = t.get("turn_number")
+    eng_side  = t.get("current_player")
     eng_phase = t.get("phase")
 
     # Number
-    number = legacy_num if legacy_num is not None else (eng_num if eng_num is not None else 1)
-
-    # Side / current player
-    side_raw = legacy_side if legacy_side is not None else (eng_side if eng_side is not None else "israel")
-    side_norm = str(side_raw).lower()
-    if side_norm.startswith("i"):
-        side = "Israel"
+    if legacy_num is not None:
+        number = legacy_num
+    elif eng_num is not None:
+        number = eng_num
     else:
-        side = "Iran"
+        number = 1
+
+    # Side: accept anything that *looks like* Israel / Iran
+    side_raw = legacy_side if legacy_side is not None else (eng_side if eng_side is not None else "Israel")
+    s_norm = str(side_raw).strip().lower()
+    if s_norm.startswith("i"):
+        side_compact = "Israel"
+        side_engine = "israel"
+    else:
+        side_compact = "Iran"
+        side_engine = "iran"
 
     # Segment / phase
     seg_raw = legacy_seg if legacy_seg is not None else (eng_phase if eng_phase is not None else "morning")
@@ -257,46 +263,68 @@ def _normalize_turn_and_resources(state: Dict[str, Any]) -> Dict[str, Any]:
     else:
         segment = "Morning"
 
+    phase = segment.lower()  # engine-style
+
     norm_turn = {
         "number": int(number),
-        "side": side,
-        "segment": segment,
+        "side": side_compact,    # external (“Israel” / “Iran”)
+        "segment": segment,      # external (“Morning”…)
+        "phase": phase,          # internal (“morning”…)
+        "engine_side": side_engine,
     }
 
     # ---- RESOURCES ----
     resources: Dict[str, Dict[str, float]] = {}
 
-    # 1) Prefer explicit compact r-block if present
-    r_block = state.get("r")
-    if isinstance(r_block, dict):
-        for s in ("israel", "iran"):
-            if s in r_block and isinstance(r_block[s], dict):
-                src = r_block[s]
-                resources[s] = {
-                    "pp": float(src.get("pp", 0.0)),
-                    "ip": float(src.get("ip", 0.0)),
-                    "mp": float(src.get("mp", 0.0)),
-                }
+    # 1) Try r-block or generic resources-block
+    r_block = state.get("r") or state.get("resources") or {}
 
-    # 2) If still missing, fall back to players[side]["resources"]
+    def canonical_side_name(k: str) -> Optional[str]:
+        lk = k.lower()
+        if lk.startswith("is"):   # israel / Israel / ISRAEL / etc.
+            return "israel"
+        if lk.startswith("ir"):   # iran / Iran / IRAN / etc.
+            return "iran"
+        return None
+
+    # Collect from r-block, no hard-coded “Israel” keys
+    if isinstance(r_block, dict):
+        for k, v in r_block.items():
+            canon = canonical_side_name(str(k))
+            if not canon:
+                continue
+            if not isinstance(v, dict):
+                continue
+            pp = v.get("pp", v.get("PP", 0.0))
+            ip = v.get("ip", v.get("IP", 0.0))
+            mp = v.get("mp", v.get("MP", 0.0))
+            resources[canon] = {
+                "pp": float(pp),
+                "ip": float(ip),
+                "mp": float(mp),
+            }
+
+    # 2) Fill or override from players[*].resources if present
     players = state.get("players")
     if isinstance(players, dict):
-        for s in ("israel", "iran"):
-            if s not in resources:
-                p = players.get(s) or {}
-                res = p.get("resources") or {}
-                if isinstance(res, dict):
-                    resources[s] = {
-                        "pp": float(res.get("pp", 0.0)),
-                        "ip": float(res.get("ip", 0.0)),
-                        "mp": float(res.get("mp", 0.0)),
-                    }
+        for k, pdata in players.items():
+            canon = canonical_side_name(str(k))
+            if not canon:
+                continue
+            res = (pdata or {}).get("resources") or {}
+            if isinstance(res, dict):
+                resources[canon] = {
+                    "pp": float(res.get("pp", 0.0)),
+                    "ip": float(res.get("ip", 0.0)),
+                    "mp": float(res.get("mp", 0.0)),
+                }
 
     # 3) Ensure both sides exist
     for s in ("israel", "iran"):
         resources.setdefault(s, {"pp": 0.0, "ip": 0.0, "mp": 0.0})
 
     return {"turn": norm_turn, "resources": resources}
+
 
 def _ensure_players_block(state: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -374,31 +402,57 @@ def _day_phase(state_dict: Dict[str, Any]) -> bool:
     ph = (state_dict.get("turn") or {}).get("phase", "")
     return str(ph).lower() in ("morning", "afternoon")
 
-def ctx_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
+def ctx_from_state(state: Dict[str, Any], side: Optional[str] = None) -> Dict[str, Any]:
     norm = _normalize_turn_and_resources(state)
-    turn_number, phase, resources = norm["turn_number"], norm["phase"], norm["resources"]
+    turn = norm["turn"]
+    resources = norm["resources"]
 
-    air = state.get("as") or state.get("air")
-    if not air:
-        raise HTTPException(422, detail="Missing air-side structure 'as'")
+    turn_number = int(turn["number"])
+    phase = str(turn.get("phase", turn.get("segment", "morning"))).lower()
 
-    isr_ready = [s["id"] for s in air.get("israel_squadrons", []) if str(s.get("st","")).lower() == "ready"]
-    irn_ready = [s["id"] for s in air.get("iran_squadrons", [])   if str(s.get("st","")).lower() == "ready"]
+    # Ready squadrons from 'as' block (AirSide)
+    ready = {"israel": [], "iran": []}
+    as_block = state.get("as") or state.get("as_", {})
+    if isinstance(as_block, dict):
+        for side_key, field in (("israel", "israel_squadrons"), ("iran", "iran_squadrons")):
+            sq_list = as_block.get(field, [])
+            if isinstance(sq_list, list):
+                for sq in sq_list:
+                    if not isinstance(sq, dict):
+                        continue
+                    st = str(sq.get("st", "")).lower()
+                    if st.startswith("r"):  # e.g. "Ready"
+                        sq_id = sq.get("id")
+                        if sq_id:
+                            ready[side_key].append(sq_id)
 
+    # Alive targets from ti
     alive_targets = _alive_targets(state)
-    meta  = state.get("meta") or {}
-    overt = bool(meta.get("israel_overt_attack_done", False))
 
-    return {
+    # Simple flags (can grow later)
+    flags = {
+        "israel_overt_attack_done": bool(
+            (state.get("flags") or {}).get("israel_overt_attack_done", False)
+        )
+    }
+
+    ctx = {
+        "checksum": _checksum(state),
         "turn_number": turn_number,
         "phase": phase,
         "resources": resources,
-        "ready": {"israel": isr_ready, "iran": irn_ready},
+        "ready": ready,
         "alive_targets": alive_targets,
-        "flags": {"israel_overt_attack_done": overt},
-        "checksum": _checksum(state)[:12],
-        "raw": state,
+        "flags": flags,
     }
+
+    # Optionally expose the logical side, but no one indexes it now
+    if side:
+        ctx["side"] = side
+    else:
+        ctx["side"] = state.get("side", "Israel")
+
+    return ctx
 
     
 def _oil_victory_snapshot(state_dict: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -612,10 +666,83 @@ def human_move(req: HumanMoveRequest):
         "info": info,
     }
 
+def _project_engine_state_back_to_compact(
+    base_state: Dict[str, Any],
+    full_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    compact = copy.deepcopy(base_state)
 
-    
-# ---------- Universes (nonce → action_id → EnumeratedAction) ----------
-_UNIVERSES: Dict[str, Dict[str, EnumeratedAction]] = {}
+    # ---- TURN ---- (same as before, just updating values)
+    base_turn = compact.get("turn") or {}
+    eng_turn = (full_state.get("turn") or {}).copy()
+    number = eng_turn.get("turn_number", base_turn.get("number", 1))
+    current_player = eng_turn.get("current_player", base_turn.get("side", "Israel"))
+    cp_norm = str(current_player).lower()
+    side = "Israel" if cp_norm.startswith("i") else "Iran"
+
+    phase = eng_turn.get("phase", base_turn.get("segment", "Morning"))
+    ph = str(phase).lower()
+    if ph.startswith("m"):
+        segment = "Morning"
+    elif ph.startswith("a"):
+        segment = "Afternoon"
+    elif ph.startswith("n"):
+        segment = "Night"
+    else:
+        segment = base_turn.get("segment", "Morning")
+
+    compact["turn"] = {
+        "number": int(number),
+        "side": side,
+        "segment": segment,
+    }
+
+    # ---- VICTORY FLAGS ----
+    if isinstance(full_state.get("victory_flags"), dict):
+        compact["victory_flags"] = copy.deepcopy(full_state["victory_flags"])
+
+    # ---- PLAYERS ----
+    players = full_state.get("players") or {}
+    compact["players"] = copy.deepcopy(players)
+
+    # ---- RESOURCES r-block (mirror original shape if any) ----
+    r_base = compact.get("r")
+    r_new: Dict[str, Dict[str, float]] = {}
+
+    def from_engine(side_name: str) -> Dict[str, float]:
+        p = players.get(side_name) or {}
+        res = p.get("resources") or {}
+        return {
+            "pp": float(res.get("pp", 0.0)),
+            "ip": float(res.get("ip", 0.0)),
+            "mp": float(res.get("mp", 0.0)),
+        }
+
+    if isinstance(r_base, dict) and r_base:
+        # preserve whatever keys the user used originally
+        for k in r_base.keys():
+            lk = str(k).lower()
+            if lk.startswith("is"):
+                r_new[k] = from_engine("israel")
+            elif lk.startswith("ir"):
+                r_new[k] = from_engine("iran")
+            else:
+                # unknown key – just pass through unchanged
+                r_new[k] = r_base[k]
+    else:
+        # no existing r-block → create a sane default
+        r_new = {
+            "israel": from_engine("israel"),
+            "iran": from_engine("iran"),
+        }
+
+    compact["r"] = r_new
+
+    # ---- LOG ----
+    if isinstance(full_state.get("log"), list):
+        compact["log"] = list(full_state["log"])
+
+    return compact
 
 # ---------- Health ----------
 @app.get("/health")
@@ -1047,28 +1174,28 @@ def plan_suggest(req: EnumerateActionsRequest):
     if not req.state:
         raise HTTPException(status_code=422, detail="Missing 'state' object in request body.")
     
-    # 1. Get the raw dict
     sdict = req.state.model_dump(by_alias=True)
 
-    # 2. FIX: Normalize the state structure (ensure 'turn' is a dict, resources exist)
-    # We reuse the normalization logic from ctx_from_state without calculating the full context
+    # 2. Normalize
     norm = _normalize_turn_and_resources(sdict)
-    
-    # 3. Apply the normalized values back to sdict so the engine doesn't crash
-    # If 'turn' was just an int, this replaces it with {"n": 1, ...}
+    norm_turn = norm["turn"]
+    norm_res = norm["resources"]
+
+    # 3. Apply normalized values back to sdict (engine-safe)
     sdict["turn"] = {
-        "turn_number": norm["turn_number"],
-        "current_player": norm["side"], # Ensure engine finds 'current_player'
-        "phase": norm["phase"]
+        "turn_number": norm_turn["number"],
+        "current_player": norm_turn["engine_side"],  # "israel"/"iran"
+        "phase": norm_turn["phase"],                 # "morning"/"afternoon"/"night"
     }
-    # Ensure resources are set correctly
+
     sdict["players"] = sdict.get("players") or {}
     for side in ("israel", "iran"):
-        sdict["players"].setdefault(side, {})["resources"] = norm["resources"].get(side, {"mp":0, "ip":0, "pp":0})
+        sdict["players"].setdefault(side, {})["resources"] = norm_res.get(
+            side, {"mp": 0.0, "ip": 0.0, "pp": 0.0}
+        )
 
-    # 4. Now call derive actions with the safe dict
+    # 4. derive actions
     actions = _derive_actions(sdict, req.side_to_move)
-    
 
     code = _side_code(req.side_to_move)           
     cs = _checksum(sdict)[:12]
@@ -1239,23 +1366,21 @@ def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
         steps = steps[-limit:]
     return {"game_id": game_id, "steps": steps}
 
-def run_ai_move_core(
-    game_id: str,
-    side: Optional[str],
-    state: Dict[str, Any],
-):
+def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
     if not ge:
         raise HTTPException(500, "Engine not available.")
 
-    # 0) Start from a full copy of the incoming state (11.json style)
-    work_state = copy.deepcopy(state)
+    # 0) Preserve the original 11.json-style state
+    base_state = copy.deepcopy(state)
+
+    # 1) Internal working state: add players/resources, etc.
+    work_state = copy.deepcopy(base_state)
     work_state = _ensure_players_block(work_state)
 
-    # 1) Detect side
+    # 2) Detect side
     target_side = side
     if not target_side:
         target_side = work_state.get("turn", {}).get("current_player", "israel").lower()
-
     target_side = str(target_side).lower()
     if target_side.startswith("i"):
         if "s" in target_side[0:2]:
@@ -1270,16 +1395,11 @@ def run_ai_move_core(
         raise HTTPException(400, f"Invalid side detected: {target_side}")
 
     try:
-        # MCTS chooses an action on the full working state
         best_action, policy = agent.choose_action(copy.deepcopy(work_state))
 
         eng = ge.GameEngine()
-        # Apply the chosen action to the full state
-        full_state_after = eng.apply_action(
-            copy.deepcopy(work_state),
-            best_action,
-            side=target_side,
-        )
+        # Apply action on a full copy of the working state
+        full_state_after = eng.apply_action(copy.deepcopy(work_state), best_action, side=target_side)
 
         reward = 0.0
         done = bool(eng.is_game_over(full_state_after)) if hasattr(eng, "is_game_over") else False
@@ -1291,7 +1411,10 @@ def run_ai_move_core(
         log_debug_output(game_id, {}, {}, error=error_msg)
         raise HTTPException(500, detail=error_msg)
 
-    # 2) RL-style logging uses full engine state
+    # 3) Project back to your compact 11.json-style state
+    next_state_compact = _project_engine_state_back_to_compact(base_state, full_state_after)
+
+    # 4) RL-style logging using the full engine state
     log_transition(
         game_id,
         work_state,
@@ -1303,7 +1426,7 @@ def run_ai_move_core(
         policy,
     )
 
-    # 3) Build GPT context from full_state_after
+    # 5) Build GPT context from full_state_after (for narrative)
     threats = []
     dmg_map = full_state_after.get("target_damage_status", {})
     for target_name, damage_data in dmg_map.items():
@@ -1334,9 +1457,8 @@ def run_ai_move_core(
         state_after=full_state_after,
     )
 
-    # 4) Return the full engine state – no projection
-    return best_action, full_state_after, gpt_context, done
-
+    # IMPORTANT: return the compact state, not the full engine blob
+    return best_action, next_state_compact, gpt_context, done
 
 
 class AIStateOnlyResponse(BaseModel):
@@ -1455,17 +1577,3 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
-
-
-
-
-
-
-
-
-
-
-
-
-
-
