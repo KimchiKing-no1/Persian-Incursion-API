@@ -298,46 +298,47 @@ def _normalize_turn_and_resources(state: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 def _ensure_players_block(state: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Ensure state['players'] exists and sync resources from compact `r` if present.
-    """
-    norm = _normalize_turn_and_resources(state)
+    s = copy.deepcopy(state)
 
-    players = state.get("players")
+    norm = _normalize_turn_and_resources(s)
+
+    # ensure players dict exists
+    players = s.get("players")
     if not isinstance(players, dict):
         players = {}
-        state["players"] = players
-
+        s["players"] = players
 
     for side in ("israel", "iran"):
         ps = players.setdefault(side, {})
-        base = norm["resources"].get(side, {"pp": 0.0, "ip": 0.0, "mp": 0.0})
-
         res = ps.get("resources")
         if not isinstance(res, dict):
             res = {}
             ps["resources"] = res
 
-       
-        res["pp"] = float(base.get("pp", 0.0))
-        res["ip"] = float(base.get("ip", 0.0))
-        res["mp"] = float(base.get("mp", 0.0))
+        # only fill if missing
+        base_res = norm["resources"].get(side, {})
+        for k in ("pp", "ip", "mp"):
+            if k not in res:
+                res[k] = float(base_res.get(k, 0.0))
 
-    
-    state["r"] = {
-        "israel": {
-            "pp": players["israel"]["resources"]["pp"],
-            "ip": players["israel"]["resources"]["ip"],
-            "mp": players["israel"]["resources"]["mp"],
-        },
-        "iran": {
-            "pp": players["iran"]["resources"]["pp"],
-            "ip": players["iran"]["resources"]["ip"],
-            "mp": players["iran"]["resources"]["mp"],
-        },
-    }
+    return s
 
-    return state
+
+    def map_side(compact_key: str, engine_key: str):
+        p = players.setdefault(engine_key, {})
+        res = p.setdefault("resources", {})
+        src = r_comp.get(compact_key, {})
+
+        # keep existing non-zero if present, otherwise take from `r`
+        res["pp"] = float(res.get("pp", src.get("pp", src.get("PP", 0.0))))
+        res["ip"] = float(res.get("ip", src.get("ip", src.get("IP", 0.0))))
+        res["mp"] = float(res.get("mp", src.get("mp", src.get("MP", 0.0))))
+
+    map_side("Israel", "israel")
+    map_side("Iran", "iran")
+
+    return s
+
 
 
 
@@ -1223,23 +1224,19 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
     if not ge:
         raise HTTPException(500, "Engine not available.")
 
-    # 0) Preserve the original 11.json-style state
+    # Original incoming JSON – whatever schema the caller uses
     base_state = copy.deepcopy(state)
 
-    # 1) Internal working state: add players/resources, etc.
-    work_state = copy.deepcopy(base_state)
-    work_state = _ensure_players_block(work_state)
+    # Internal working view for engine/MCTS
+    work_state = _ensure_players_block(copy.deepcopy(base_state))
 
-    # 2) Detect side
-    target_side = side
-    if not target_side:
-        target_side = work_state.get("turn", {}).get("current_player", "israel").lower()
+    # Detect side
+    target_side = side or work_state.get("turn", {}).get("current_player", "israel")
     target_side = str(target_side).lower()
     if target_side.startswith("i"):
-        if "s" in target_side[0:2]:
-            target_side = "israel"
-        elif "r" in target_side[0:2]:
-            target_side = "iran"
+        target_side = "israel"
+    elif target_side.startswith("r"):
+        target_side = "iran"
 
     log_debug_input(game_id, target_side, work_state)
 
@@ -1248,11 +1245,14 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         raise HTTPException(400, f"Invalid side detected: {target_side}")
 
     try:
-        best_action, policy = agent.choose_action(copy.deepcopy(work_state))
+        best_action, policy = agent.choose_action(work_state)
 
-        eng = ge.GameEngine()
-        # Apply action on a full copy of the working state
-        full_state_after = eng.apply_action(copy.deepcopy(work_state), best_action, side=target_side)
+        eng = ENGINE  # reuse global engine
+        full_state_after = eng.apply_action(
+            copy.deepcopy(work_state),
+            best_action,
+            side=target_side,
+        )
 
         reward = 0.0
         done = bool(eng.is_game_over(full_state_after)) if hasattr(eng, "is_game_over") else False
@@ -1264,13 +1264,9 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         log_debug_output(game_id, {}, {}, error=error_msg)
         raise HTTPException(500, detail=error_msg)
 
-    # 3) Project back to compact (11.json-like) state for external API
-    next_state_compact = _project_engine_state_back_to_compact(
-        base_state=base_state,
-        full_state=full_state_after,
-    )
+    # IMPORTANT: generic projection, no hard-coded “11.json”
+    next_state = _merge_engine_state_into_base(base_state, full_state_after)
 
-    # 4) RL-style logging using full_state_after
     log_transition(
         game_id,
         work_state,
@@ -1282,6 +1278,7 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         policy,
     )
 
+    # threat list from full engine state
     threats = []
     dmg_map = full_state_after.get("target_damage_status", {})
     for target_name, damage_data in dmg_map.items():
@@ -1294,7 +1291,6 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
                 threats.append(target_name)
 
     role_title = "IAF Commander" if target_side == "israel" else "IRGC Commander"
-
     gpt_context = {
         "active_side": target_side,
         "narrative_role": role_title,
@@ -1304,9 +1300,15 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         "game_over": done,
     }
 
-    log_debug_output(game_id, best_action, gpt_context, state_before=work_state, state_after=full_state_after)
+    log_debug_output(
+        game_id,
+        best_action,
+        gpt_context,
+        state_before=work_state,
+        state_after=full_state_after,
+    )
 
-    return best_action, next_state_compact, gpt_context, done
+    return best_action, next_state, gpt_context, done
 
 
 class AIStateOnlyResponse(BaseModel):
@@ -1340,77 +1342,92 @@ def ai_move(
         "gpt_context": gpt_context,
         "done": done,
     }
-def _project_engine_state_back_to_compact(
+
+def _merge_engine_state_into_base(
     base_state: Dict[str, Any],
-    full_state: Dict[str, Any]
+    engine_state: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
-    Take:
-      - base_state: original 11.json-style state from the user/MyGPT
-      - full_state: engine-mutated state with players/log/victory_flags/etc.
-    Return:
-      - a state that keeps the 11.json structure but also carries new info.
+    Return a new state that:
+    - preserves the *shape* of base_state
+    - but updates key dynamic fields from engine_state
+    Works for many schema variants (11.json compact, verbose, future versions).
     """
-    compact = copy.deepcopy(base_state)
+    out = copy.deepcopy(base_state)
 
-    # 1) Mirror resources back into compact["r"]
-    if "players" in full_state:
-        compact_r = compact.get("r", {}) or {}
-        for side in ("israel", "iran"):
-            pres = (
-                full_state
-                .get("players", {})
-                .get(side, {})
-                .get("resources", {})
-            )
-            if pres:
-                side_r = compact_r.setdefault(side, {})
-                side_r["mp"] = float(pres.get("mp", 0))
-                side_r["ip"] = float(pres.get("ip", 0))
-                side_r["pp"] = float(pres.get("pp", 0))
-        compact["r"] = compact_r
-
-    # 2) Turn mapping: engine turn → compact turn
-    fturn = full_state.get("turn", {}) or {}
-    if fturn:
-        # 11.json uses "number", "side", "segment"
-        segment = fturn.get("phase") or fturn.get("segment") or "morning"
-        if segment in ("m", "a", "n"):
-            segment = {"m": "morning", "a": "afternoon", "n": "night"}[segment]
-
-        cur_player = fturn.get("current_player", compact.get("turn", {}).get("side", "Israel"))
-        side_name = "Israel" if str(cur_player).lower().startswith("i") else "Iran"
-
-        compact["turn"] = {
-            "number": int(fturn.get("turn_number", fturn.get("n", 1))),
-            "side": side_name,
-            "segment": segment.capitalize(),  # Morning/Afternoon/Night to match 11.json
-        }
-
-    # 3) Carry over opinion, damage, victory flags, events, log, etc.
-    for key in [
-        "opinion",
-        "target_damage_status",
+    # 1) Always-safe global fields – just overwrite
+    for key in (
         "victory_flags",
-        "active_events_queue",
+        "target_damage_status",
         "losses",
+        "opinion",
+        "active_events_queue",
         "log",
-    ]:
-        if key in full_state:
-            compact[key] = full_state[key]
+    ):
+        if key in engine_state:
+            out[key] = copy.deepcopy(engine_state[key])
 
-    # 4) Keep air, targets & other original blocks from base_state unless engine replaced them
-    for key in ["as", "ti", "o", "meta", "rules", "oob"]:
-        if key in full_state:
-            compact[key] = full_state[key]
-        elif key in base_state and key not in compact:
-            compact[key] = base_state[key]
+    # 2) Players/resources copied back (engine always has canonical players[*].resources)
+    if "players" in engine_state:
+        # preserve any extra per-player fields from base_state
+        base_players = out.get("players", {})
+        eng_players = engine_state["players"]
+        merged_players = copy.deepcopy(base_players)
 
-    # 5) Optionally expose players as well (for debugging / RL)
-    if "players" in full_state:
-        compact["players"] = full_state["players"]
+        for side, pdata in eng_players.items():
+            bp = merged_players.setdefault(side, {})
+            # overwrite resources from engine, keep other keys
+            if "resources" in pdata:
+                bp["resources"] = copy.deepcopy(pdata["resources"])
+        out["players"] = merged_players
 
-    return compact
+    # 3) If base used compact "r" resources, rebuild it from engine players
+    if "r" in out and "players" in engine_state:
+        r = out["r"]
+        for side_key, side_name in (("Israel", "israel"), ("Iran", "iran"),
+                                    ("israel", "israel"), ("iran", "iran")):
+            if side_key in r and side_name in engine_state["players"]:
+                eng_res = engine_state["players"][side_name].get("resources", {})
+                r[side_key]["pp"] = float(eng_res.get("pp", 0.0))
+                r[side_key]["ip"] = float(eng_res.get("ip", 0.0))
+                r[side_key]["mp"] = float(eng_res.get("mp", 0.0))
+
+    # 4) Turn mapping – update values but keep original style
+    if "turn" in engine_state and "turn" in out:
+        eng_t = engine_state["turn"]
+        base_t = out["turn"]
+
+        if isinstance(base_t, dict) and isinstance(eng_t, dict):
+            # number
+            num = eng_t.get("turn_number") or eng_t.get("n") or eng_t.get("number")
+            if num is not None:
+                for k in ("turn_number", "number", "n"):
+                    if k in base_t:
+                        base_t[k] = num
+            # current_player / side
+            cp = eng_t.get("current_player") or eng_t.get("side")
+            if cp is not None:
+                if "current_player" in base_t:
+                    base_t["current_player"] = cp
+                if "side" in base_t:
+                    # keep capitalisation if base used "Israel"/"Iran"
+                    base_t["side"] = cp.capitalize() if isinstance(base_t["side"], str) else cp
+            # phase / segment
+            phase = eng_t.get("phase")
+            if phase is not None:
+                if "phase" in base_t:
+                    base_t["phase"] = phase
+                if "segment" in base_t:
+                    base_t["segment"] = phase.capitalize()
+            out["turn"] = base_t
+        else:
+            # if base used a simple int turn, keep it or bump if engine advanced
+            eng_num = eng_t.get("turn_number") if isinstance(eng_t, dict) else None
+            if isinstance(base_t, int) and isinstance(eng_num, int) and eng_num > base_t:
+                out["turn"] = eng_num
+
+    return out
+
 
 
 
