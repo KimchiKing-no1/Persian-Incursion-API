@@ -1220,23 +1220,29 @@ def get_episode_logs(game_id: str, limit: int = Query(50, ge=1, le=500)):
         steps = steps[-limit:]
     return {"game_id": game_id, "steps": steps}
 
-def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
+def run_ai_move_core(
+    game_id: str,
+    side: Optional[str],
+    state: Dict[str, Any],
+):
     if not ge:
         raise HTTPException(500, "Engine not available.")
 
-    # Original incoming JSON – whatever schema the caller uses
-    base_state = copy.deepcopy(state)
+    # 0) Start from a full copy of the incoming state (11.json style)
+    work_state = copy.deepcopy(state)
+    work_state = _ensure_players_block(work_state)
 
-    # Internal working view for engine/MCTS
-    work_state = _ensure_players_block(copy.deepcopy(base_state))
+    # 1) Detect side
+    target_side = side
+    if not target_side:
+        target_side = work_state.get("turn", {}).get("current_player", "israel").lower()
 
-    # Detect side
-    target_side = side or work_state.get("turn", {}).get("current_player", "israel")
     target_side = str(target_side).lower()
     if target_side.startswith("i"):
-        target_side = "israel"
-    elif target_side.startswith("r"):
-        target_side = "iran"
+        if "s" in target_side[0:2]:
+            target_side = "israel"
+        elif "r" in target_side[0:2]:
+            target_side = "iran"
 
     log_debug_input(game_id, target_side, work_state)
 
@@ -1245,9 +1251,11 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         raise HTTPException(400, f"Invalid side detected: {target_side}")
 
     try:
-        best_action, policy = agent.choose_action(work_state)
+        # MCTS chooses an action on the full working state
+        best_action, policy = agent.choose_action(copy.deepcopy(work_state))
 
-        eng = ENGINE  # reuse global engine
+        eng = ge.GameEngine()
+        # Apply the chosen action to the full state
         full_state_after = eng.apply_action(
             copy.deepcopy(work_state),
             best_action,
@@ -1264,9 +1272,7 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         log_debug_output(game_id, {}, {}, error=error_msg)
         raise HTTPException(500, detail=error_msg)
 
-    # IMPORTANT: generic projection, no hard-coded “11.json”
-    next_state = _merge_engine_state_into_base(base_state, full_state_after)
-
+    # 2) RL-style logging uses full engine state
     log_transition(
         game_id,
         work_state,
@@ -1278,7 +1284,7 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         policy,
     )
 
-    # threat list from full engine state
+    # 3) Build GPT context from full_state_after
     threats = []
     dmg_map = full_state_after.get("target_damage_status", {})
     for target_name, damage_data in dmg_map.items():
@@ -1291,6 +1297,7 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
                 threats.append(target_name)
 
     role_title = "IAF Commander" if target_side == "israel" else "IRGC Commander"
+
     gpt_context = {
         "active_side": target_side,
         "narrative_role": role_title,
@@ -1308,7 +1315,9 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         state_after=full_state_after,
     )
 
-    return best_action, next_state, gpt_context, done
+    # 4) Return the full engine state – no projection
+    return best_action, full_state_after, gpt_context, done
+
 
 
 class AIStateOnlyResponse(BaseModel):
@@ -1317,31 +1326,22 @@ class AIStateOnlyResponse(BaseModel):
     gpt_context: Dict[str, Any]
     done: bool
 
-@app.post(
-    "/ai_move",
-    response_model=AIStateOnlyResponse,
-    summary="RL/MCTS move with raw game-state JSON",
-    description=(
-        "Request body = full Persian Incursion game state JSON (same format as 11.json). "
-        "Response returns the chosen action and the UPDATED game state JSON under 'state', "
-        "plus explanation context for MyGPT."
-    ),
-)
+@app.post("/ai_move", response_model=AIStateOnlyResponse, ...)
 def ai_move(
-    
     state: Dict[str, Any] = Body(..., embed=False),
-    game_id: str = Query("default_game", description="Episode/game id for RL logging"),
-    side: Optional[str] = Query(None, description="Side to move; if omitted, detect from state.turn.current_player"),
+    game_id: str = Query("default_game"),
+    side: Optional[str] = Query(None),
 ):
     best_action, next_state, gpt_context, done = run_ai_move_core(
         game_id, side, state
     )
     return {
         "action": best_action,
-        "state": next_state,       
+        "state": next_state,
         "gpt_context": gpt_context,
         "done": done,
     }
+
 
 def _merge_engine_state_into_base(
     base_state: Dict[str, Any],
@@ -1427,6 +1427,7 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
+
 
 
 
