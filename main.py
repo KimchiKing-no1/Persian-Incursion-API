@@ -219,125 +219,144 @@ _SIDE_NORMALIZE = {
 }
 
 def _normalize_turn_and_resources(state: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    - Normalizes turn/time data.
-    - Ensures 'resources' always has 'israel' and 'iran' keys to prevent KeyErrors.
-    """
-    raw_t = state.get("turn", None)
-    if raw_t is None:
-        raw_t = state.get("t", None)
+    # ---- TURN ----
+    t = state.get("turn") or {}
+    if not isinstance(t, dict):
+        t = {}
 
-    # ---- 1) Turn logic ----
-    if isinstance(raw_t, int):
-        t = {"n": int(raw_t)}
-    elif isinstance(raw_t, dict):
-        t = raw_t
+    # Legacy fields
+    legacy_num = t.get("number")
+    legacy_side = t.get("side")
+    legacy_seg = t.get("segment")
+
+    # Engine fields
+    eng_num = t.get("turn_number")
+    eng_side = t.get("current_player")
+    eng_phase = t.get("phase")
+
+    # Number
+    number = legacy_num if legacy_num is not None else (eng_num if eng_num is not None else 1)
+
+    # Side / current player
+    side_raw = legacy_side if legacy_side is not None else (eng_side if eng_side is not None else "israel")
+    side_norm = str(side_raw).lower()
+    if side_norm.startswith("i"):
+        side = "Israel"
     else:
-        # Default fallback to prevent crashes on missing turn info
-        t = {"n": 1}
+        side = "Iran"
 
-    # Turn number
-    n = t.get("turn_number", t.get("n", t.get("number", 1)))
+    # Segment / phase
+    seg_raw = legacy_seg if legacy_seg is not None else (eng_phase if eng_phase is not None else "morning")
+    seg = str(seg_raw).strip().lower()
+    if seg.startswith("m"):
+        segment = "Morning"
+    elif seg.startswith("a"):
+        segment = "Afternoon"
+    elif seg.startswith("n"):
+        segment = "Night"
+    else:
+        segment = "Morning"
 
-    # Side
-    sd_raw = t.get("side", t.get("s"))
-    side = "israel"  # default
-    if isinstance(sd_raw, str):
-        side = _SIDE_NORMALIZE.get(sd_raw, "israel")
-
-    # Phase
-    ph_raw = t.get("phase", t.get("segment", t.get("ts")))
-    phase = "morning"
-    if isinstance(ph_raw, str):
-        p = ph_raw.lower()
-        if p in ("m", "morning"):
-            phase = "morning"
-        elif p in ("a", "afternoon"):
-            phase = "afternoon"
-        elif p in ("n", "night"):
-            phase = "night"
-
-    # ---- 2) Resources logic ----
-    resources: Dict[str, Dict[str, float]] = {}
-    r_compact = state.get("r")
-    r_verbose = state.get("resources")
-
-    if isinstance(r_verbose, dict):
-        # Format: { "israel": {"pp":..}, "iran":{...} }
-        for s in ("israel", "iran"):
-            if s in r_verbose and isinstance(r_verbose[s], dict):
-                rs = r_verbose[s]
-                resources[s] = {
-                    "mp": float(rs.get("mp", 0)),
-                    "ip": float(rs.get("ip", 0)),
-                    "pp": float(rs.get("pp", 0)),
-                }
-    elif isinstance(r_compact, dict):
-        # Format: { "I": {"P":..,"I":..,"M":..}, "R": {...} }
-        for k, v in r_compact.items():
-            norm_side = _SIDE_NORMALIZE.get(k, None)
-            if not norm_side or not isinstance(v, dict):
-                continue
-            resources[norm_side] = {
-                "mp": float(v.get("M", v.get("mp", 0))),
-                "ip": float(v.get("I", v.get("ip", 0))),
-                "pp": float(v.get("P", v.get("pp", 0))),
-            }
-    
-    # --- FIX: Ensure both sides exist with defaults if missing ---
-    for s in ("israel", "iran"):
-        if s not in resources:
-            resources[s] = {"mp": 0.0, "ip": 0.0, "pp": 0.0}
-    # -------------------------------------------------------------
-
-    return {
-        "turn_number": int(n),
+    norm_turn = {
+        "number": int(number),
         "side": side,
-        "phase": phase,
-        "resources": resources,
+        "segment": segment,
     }
 
+    # ---- RESOURCES ----
+    resources: Dict[str, Dict[str, float]] = {}
+
+    # 1) Prefer explicit compact r-block if present
+    r_block = state.get("r")
+    if isinstance(r_block, dict):
+        for s in ("israel", "iran"):
+            if s in r_block and isinstance(r_block[s], dict):
+                src = r_block[s]
+                resources[s] = {
+                    "pp": float(src.get("pp", 0.0)),
+                    "ip": float(src.get("ip", 0.0)),
+                    "mp": float(src.get("mp", 0.0)),
+                }
+
+    # 2) If still missing, fall back to players[side]["resources"]
+    players = state.get("players")
+    if isinstance(players, dict):
+        for s in ("israel", "iran"):
+            if s not in resources:
+                p = players.get(s) or {}
+                res = p.get("resources") or {}
+                if isinstance(res, dict):
+                    resources[s] = {
+                        "pp": float(res.get("pp", 0.0)),
+                        "ip": float(res.get("ip", 0.0)),
+                        "mp": float(res.get("mp", 0.0)),
+                    }
+
+    # 3) Ensure both sides exist
+    for s in ("israel", "iran"):
+        resources.setdefault(s, {"pp": 0.0, "ip": 0.0, "mp": 0.0})
+
+    return {"turn": norm_turn, "resources": resources}
+
 def _ensure_players_block(state: Dict[str, Any]) -> Dict[str, Any]:
-    s = copy.deepcopy(state)
+    """
+    Ensure state has the engine-style players block,
+    using normalized turn + resources from compact or engine formats.
+    """
+    norm = _normalize_turn_and_resources(state)
 
-    norm = _normalize_turn_and_resources(s)
+    # Keep original turn structure for compact format, but also
+    # make sure engine can read it.
+    state["turn"] = state.get("turn", {})
+    if not isinstance(state["turn"], dict):
+        state["turn"] = {}
 
-    # ensure players dict exists
-    players = s.get("players")
+    # Compact fields (for your 11.json logs)
+    state["turn"]["number"] = norm["turn"]["number"]
+    state["turn"]["side"] = norm["turn"]["side"]
+    state["turn"]["segment"] = norm["turn"]["segment"]
+
+    # Engine fields (for GameEngine)
+    state["turn"].setdefault("turn_number", norm["turn"]["number"])
+    # current_player must be lowercase for engine
+    cur_side = norm["turn"]["side"]
+    cur_side_engine = "israel" if str(cur_side).lower().startswith("i") else "iran"
+    state["turn"].setdefault("current_player", cur_side_engine)
+    # simple mapping of segment -> phase
+    seg = norm["turn"]["segment"].lower()
+    if seg.startswith("m"):
+        phase = "morning"
+    elif seg.startswith("a"):
+        phase = "afternoon"
+    elif seg.startswith("n"):
+        phase = "night"
+    else:
+        phase = "morning"
+    state["turn"].setdefault("phase", phase)
+
+    # Resources
+    resources = norm["resources"]
+    state["r"] = resources  # keep compact r-block always in sync
+
+    players = state.setdefault("players", {})
     if not isinstance(players, dict):
         players = {}
-        s["players"] = players
+        state["players"] = players
 
     for side in ("israel", "iran"):
-        ps = players.setdefault(side, {})
-        res = ps.get("resources")
-        if not isinstance(res, dict):
-            res = {}
-            ps["resources"] = res
-
-        # only fill if missing
-        base_res = norm["resources"].get(side, {})
-        for k in ("pp", "ip", "mp"):
-            if k not in res:
-                res[k] = float(base_res.get(k, 0.0))
-
-    return s
-
-
-    def map_side(compact_key: str, engine_key: str):
-        p = players.setdefault(engine_key, {})
+        p = players.setdefault(side, {})
         res = p.setdefault("resources", {})
-        src = r_comp.get(compact_key, {})
+        base = resources.get(side, {"pp": 0.0, "ip": 0.0, "mp": 0.0})
+        res["pp"] = float(base.get("pp", 0.0))
+        res["ip"] = float(base.get("ip", 0.0))
+        res["mp"] = float(base.get("mp", 0.0))
 
-        # keep existing non-zero if present, otherwise take from `r`
-        res["pp"] = float(res.get("pp", src.get("pp", src.get("PP", 0.0))))
-        res["ip"] = float(res.get("ip", src.get("ip", src.get("IP", 0.0))))
-        res["mp"] = float(res.get("mp", src.get("mp", src.get("MP", 0.0))))
+        p.setdefault("river", [])
+        p.setdefault("deck", [])
+        p.setdefault("discard", [])
 
-    map_side("Israel", "israel")
-    map_side("Iran", "iran")
+    return state
 
-    return s
 
 
 
@@ -1436,6 +1455,7 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
+
 
 
 
