@@ -13,6 +13,8 @@ from game_engine import GameEngine
 from mcts import MCTSAgent
 from fastapi import Query
 EPISODES: Dict[str, List[dict]] = {}
+_UNIVERSES: Dict[str, Dict[str, Any]] = {}
+
 
 # ---------- Firestore client (optional) ----------
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID")
@@ -1582,4 +1584,5 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
+
 
