@@ -1326,7 +1326,17 @@ class AIStateOnlyResponse(BaseModel):
     gpt_context: Dict[str, Any]
     done: bool
 
-@app.post("/ai_move", response_model=AIStateOnlyResponse, ...)
+
+@app.post(
+    "/ai_move",
+    response_model=AIStateOnlyResponse,
+    summary="RL/MCTS move with raw game-state JSON",
+    description=(
+        "Request body = full Persian Incursion game state JSON (same format as 11.json). "
+        "Response returns the chosen action and the UPDATED game state JSON under 'state', "
+        "plus explanation context for MyGPT."
+    ),
+)
 def ai_move(
     state: Dict[str, Any] = Body(..., embed=False),
     game_id: str = Query("default_game"),
@@ -1341,7 +1351,6 @@ def ai_move(
         "gpt_context": gpt_context,
         "done": done,
     }
-
 
 def _merge_engine_state_into_base(
     base_state: Dict[str, Any],
@@ -1427,6 +1436,7 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
+
 
 
 
