@@ -503,18 +503,22 @@ class MCTSAgent:
             return [{"type": "Pass"}]
 
 
-    def _safe_apply(self, state: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
+    def _safe_apply(self, state: Dict[str, Any], action: Dict[str, Any], side: str):
+        """
+        Apply action on a copy of `state` so MCTS never mutates the shared root.
+        """
         try:
-            return self.engine.apply_action(state, action)
+            if self.engine is None:
+                return state
+    
+            # CRITICAL: never mutate the input state
+            new_state = self._fast_copy(state)   # or copy.deepcopy(state)
+            return self.engine.apply_action(new_state, action, side=side)
         except Exception as e:
-            if self.strict:
-                raise
-            if self.verbose:
-                print(
-                    f"[MCTS] WARNING: apply_action failed, "
-                    f"returning unchanged state. Error: {e}"
-                )
+            if self.logger:
+                self.logger.error(f"_safe_apply failed: {e}")
             return state
+
 
     def _state_key(self, state: Dict[str, Any]) -> str:
         def _canon_event(ev: Any) -> Any:
