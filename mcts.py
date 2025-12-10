@@ -257,7 +257,19 @@ class MCTSAgent:
 
     def _expand(self, node: Node) -> Node:
         action = node.unexpanded_actions.pop(0)
-        next_state = self._safe_apply(self._fast_copy(node.state), action)
+
+        # Infer the side from the node state; fall back to agent side
+        side = (
+            node.state.get("turn", {}).get("current_player")
+            or self.side
+            or "israel"
+        )
+
+        next_state = self._safe_apply(
+            self._fast_copy(node.state),
+            action,
+            side=side,
+        )
 
         child = self._make_node(next_state, parent=node, incoming_action=action)
 
@@ -323,7 +335,11 @@ class MCTSAgent:
             current_player = sim_state.get("turn", {}).get("current_player", "israel")
             move = self._heuristic_policy_select(sim_state, legal, current_player)
 
-            sim_state = self._safe_apply(sim_state, move)
+            sim_state = self._safe_apply(
+                sim_state,
+                move,
+                side=current_player,
+            )
             depth += 1
 
         return self._static_eval(sim_state)
@@ -503,21 +519,36 @@ class MCTSAgent:
             return [{"type": "Pass"}]
 
 
-    def _safe_apply(self, state: Dict[str, Any], action: Dict[str, Any], side: str):
+    def _safe_apply(
+        self,
+        state: Dict[str, Any],
+        action: Dict[str, Any],
+        side: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
-        Apply action on a copy of `state` so MCTS never mutates the shared root.
+        Wrapper around engine.apply_action that is side-aware and fault-tolerant.
         """
+        # If side not given, infer from state or fall back to agent side
+        if side is None:
+            side = (
+                state.get("turn", {}).get("current_player")
+                or self.side
+                or "israel"
+            )
+        side = str(side).lower()
+
         try:
-            if self.engine is None:
-                return state
-    
-            # CRITICAL: never mutate the input state
-            new_state = self._fast_copy(state)   # or copy.deepcopy(state)
-            return self.engine.apply_action(new_state, action, side=side)
+            return self.engine.apply_action(state, action, side=side)
         except Exception as e:
-            if self.logger:
-                self.logger.error(f"_safe_apply failed: {e}")
+            if self.strict:
+                raise
+            if self.verbose:
+                print(
+                    f"[MCTS] WARNING: apply_action failed for side={side}, "
+                    f"returning unchanged state. Error: {e}"
+                )
             return state
+
 
 
     def _state_key(self, state: Dict[str, Any]) -> str:
