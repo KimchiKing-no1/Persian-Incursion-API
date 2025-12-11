@@ -1487,45 +1487,38 @@ class AIStateOnlyResponse(BaseModel):
     done: bool
 
 
-# --- 1. Define a dynamic wrapper model ---
-class DynamicAIRequest(BaseModel):
-
+# --- 1. Define the Fully Dynamic Wrapper Model ---
+class AIMoveRequest(BaseModel):
     game_id: str = Field("default_game", description="The game ID")
     side: Optional[str] = Field(None, description="Israel or Iran")
-
-
-    turn: Optional[Dict[str, Any]] = None
-    r: Optional[Dict[str, Any]] = None
-    o: Optional[Dict[str, Any]] = None
-    as_: Optional[Any] = Field(None, alias="as")  
-    u: Optional[Dict[str, Any]] = None
-    bm: Optional[Dict[str, Any]] = None
-    swm: Optional[Dict[str, Any]] = None
-    ti: Optional[Dict[str, Any]] = None
     
-
+    # The '...' means this field is REQUIRED.
+    # It accepts ANY JSON structure (Dict[str, Any]), so it will work
+    # regardless of how the game state evolves in the future.
+    state: Dict[str, Any] = Field(
+        ..., 
+        description="The full dynamic game state container. Put 'turn', 'r', 'as', etc. inside here."
+    )
+    
     model_config = ConfigDict(extra="allow")
-    model_config = ConfigDict(extra="allow")
 
-# --- 2. The updated endpoint ---
+# --- 2. The Updated Endpoint ---
 @app.post(
     "/ai_move",
     response_model=AIStateOnlyResponse,
     summary="RL/MCTS move with dynamic input support",
-    description="Accepts flat or nested state. Handles 'turn', 'r', etc. dynamically."
+    description="Expects a JSON body with 'game_id', 'side', and a 'state' object containing the full game data."
 )
-def ai_move(payload: Dict[str, Any]):  
+def ai_move(req: AIMoveRequest):
+    # 1. Extract data using the model
+    gid = req.game_id
+    s_arg = req.side
+    
+    # Since we defined 'state' as a Dict in the model, 
+    # we can access it directly. No need for .pop() or checking checks.
+    game_state = req.state 
 
-    gid = payload.pop("game_id", "default_game")
-    s_arg = payload.pop("side", None)
-
-
-    if "state" in payload and isinstance(payload["state"], dict):
-        game_state = payload["state"]
-    else:
-        game_state = payload
-
-
+    # 2. Run the AI Core Logic
     best_action, next_state, gpt_context, done = run_ai_move_core(
         gid, s_arg, game_state
     )
@@ -1535,7 +1528,8 @@ def ai_move(payload: Dict[str, Any]):
         "state": next_state,
         "gpt_context": gpt_context,
         "done": done,
-    }   
+    }
+    
 def _merge_engine_state_into_base(
     base_state: Dict[str, Any],
     engine_state: Dict[str, Any],
@@ -1620,6 +1614,7 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
+
 
 
 
