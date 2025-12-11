@@ -1372,18 +1372,30 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
     if not ge:
         raise HTTPException(500, "Engine not available.")
 
-    # --- NEW: unwrap 11.json-style wrapper if present ---
-    # If top-level has a "state" dict and does NOT already look like an engine state,
-    # treat that inner object as the real game state.
-    if "state" in state and isinstance(state["state"], dict) and "turn" not in state:
+
+        if not isinstance(d, dict):
+            return False
+        # Compact / engine formats usually have at least one of these:
+        for key in ("turn", "t", "as", "r", "u", "bm", "swm", "ti"):
+            if key in d:
+                return True
+        return False
+
+    while (
+        isinstance(state, dict)
+        and "state" in state
+        and isinstance(state["state"], dict)
+        and not looks_like_game_state(state)
+    ):
+        # Peel one wrapper layer
         state = state["state"]
 
-    # 0) Preserve the original 11.json-style state
+    # 0) Preserve the original (possibly still compact) state
     base_state = copy.deepcopy(state)
 
     # 1) Internal working state: add players/resources, etc.
     work_state = copy.deepcopy(base_state)
-    work_state = _ensure_players_block(work_state)
+    work_state = _ensure_players_block(work_state))
     # 2) Detect side
     target_side = side
     if not target_side:
@@ -1584,5 +1596,6 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
+
 
 
