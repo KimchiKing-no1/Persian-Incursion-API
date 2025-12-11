@@ -1514,23 +1514,18 @@ class DynamicAIRequest(BaseModel):
     summary="RL/MCTS move with dynamic input support",
     description="Accepts flat or nested state. Handles 'turn', 'r', etc. dynamically."
 )
-def ai_move(req: DynamicAIRequest):
-    # Convert the incoming JSON to a dictionary
-    raw_data = req.model_dump()
+def ai_move(payload: Dict[str, Any]):  
 
-    # 1. Extract metadata (game_id / side) and remove them from the data
-    gid = raw_data.pop("game_id", "default_game")
-    s_arg = raw_data.pop("side", None)
+    gid = payload.pop("game_id", "default_game")
+    s_arg = payload.pop("side", None)
 
-    # 2. Determine where the 'state' is
-    # Scenario A: AI sent { "state": { "turn": 1, ... }, "game_id": "..." }
-    if "state" in raw_data and isinstance(raw_data["state"], dict):
-        game_state = raw_data["state"]
-    # Scenario B: AI sent { "turn": 1, "r": {...}, "game_id": "..." } (The "Flat" issue you had)
+
+    if "state" in payload and isinstance(payload["state"], dict):
+        game_state = payload["state"]
     else:
-        game_state = raw_data
+        game_state = payload
 
-    # 3. Call your existing core logic
+
     best_action, next_state, gpt_context, done = run_ai_move_core(
         gid, s_arg, game_state
     )
@@ -1540,7 +1535,6 @@ def ai_move(req: DynamicAIRequest):
         "state": next_state,
         "gpt_context": gpt_context,
         "done": done,
-    }
 
 def _merge_engine_state_into_base(
     base_state: Dict[str, Any],
@@ -1626,6 +1620,7 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
+
 
 
 
