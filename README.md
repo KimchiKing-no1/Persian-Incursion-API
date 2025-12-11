@@ -22,4 +22,4 @@ If you simply want MyGPT to pick and resolve a reasonable impulse automatically,
 Run the same smoke check used in development:
 
 ```bash
-python -m compileall .
+python -m compileall.
