@@ -1535,7 +1535,7 @@ def ai_move(payload: Dict[str, Any]):
         "state": next_state,
         "gpt_context": gpt_context,
         "done": done,
-
+    }   
 def _merge_engine_state_into_base(
     base_state: Dict[str, Any],
     engine_state: Dict[str, Any],
@@ -1620,6 +1620,7 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
+
 
 
 
