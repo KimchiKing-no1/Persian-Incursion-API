@@ -1487,24 +1487,45 @@ class AIStateOnlyResponse(BaseModel):
     done: bool
 
 
+# --- 1. Define a dynamic wrapper model ---
+class DynamicAIRequest(BaseModel):
+    # Explicitly capture metadata if the AI sends it
+    game_id: Optional[str] = "default_game"
+    side: Optional[str] = None
+    
+    # "extra='allow'" is the magic setting. 
+    # It tells FastAPI: "If you see fields like 'turn', 'r', 'o', 'as', 
+    # just accept them and put them in the model dump."
+    model_config = ConfigDict(extra="allow")
+
+# --- 2. The updated endpoint ---
 @app.post(
     "/ai_move",
     response_model=AIStateOnlyResponse,
-    summary="RL/MCTS move with raw game-state JSON",
-    description=(
-        "Request body = full Persian Incursion game state JSON (same format as 11.json). "
-        "Response returns the chosen action and the UPDATED game state JSON under 'state', "
-        "plus explanation context for MyGPT."
-    ),
+    summary="RL/MCTS move with dynamic input support",
+    description="Accepts flat or nested state. Handles 'turn', 'r', etc. dynamically."
 )
-def ai_move(
-    state: Dict[str, Any] = Body(..., embed=False),
-    game_id: str = Query("default_game"),
-    side: Optional[str] = Query(None),
-):
+def ai_move(req: DynamicAIRequest):
+    # Convert the incoming JSON to a dictionary
+    raw_data = req.model_dump()
+
+    # 1. Extract metadata (game_id / side) and remove them from the data
+    gid = raw_data.pop("game_id", "default_game")
+    s_arg = raw_data.pop("side", None)
+
+    # 2. Determine where the 'state' is
+    # Scenario A: AI sent { "state": { "turn": 1, ... }, "game_id": "..." }
+    if "state" in raw_data and isinstance(raw_data["state"], dict):
+        game_state = raw_data["state"]
+    # Scenario B: AI sent { "turn": 1, "r": {...}, "game_id": "..." } (The "Flat" issue you had)
+    else:
+        game_state = raw_data
+
+    # 3. Call your existing core logic
     best_action, next_state, gpt_context, done = run_ai_move_core(
-        game_id, side, state
+        gid, s_arg, game_state
     )
+
     return {
         "action": best_action,
         "state": next_state,
@@ -1596,6 +1617,7 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
+
 
 
 
