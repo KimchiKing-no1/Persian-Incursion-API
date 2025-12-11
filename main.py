@@ -1489,13 +1489,22 @@ class AIStateOnlyResponse(BaseModel):
 
 # --- 1. Define a dynamic wrapper model ---
 class DynamicAIRequest(BaseModel):
-    # Explicitly capture metadata if the AI sends it
-    game_id: Optional[str] = "default_game"
-    side: Optional[str] = None
+
+    game_id: str = Field("default_game", description="The game ID")
+    side: Optional[str] = Field(None, description="Israel or Iran")
+
+
+    turn: Optional[Dict[str, Any]] = None
+    r: Optional[Dict[str, Any]] = None
+    o: Optional[Dict[str, Any]] = None
+    as_: Optional[Any] = Field(None, alias="as")  
+    u: Optional[Dict[str, Any]] = None
+    bm: Optional[Dict[str, Any]] = None
+    swm: Optional[Dict[str, Any]] = None
+    ti: Optional[Dict[str, Any]] = None
     
-    # "extra='allow'" is the magic setting. 
-    # It tells FastAPI: "If you see fields like 'turn', 'r', 'o', 'as', 
-    # just accept them and put them in the model dump."
+
+    model_config = ConfigDict(extra="allow")
     model_config = ConfigDict(extra="allow")
 
 # --- 2. The updated endpoint ---
@@ -1617,6 +1626,7 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
+
 
 
 
