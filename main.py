@@ -186,7 +186,7 @@ app = FastAPI(
     version="0.3.0",
     description="Authoritative rules + action enumerator to bound MyGPT",
     lifespan=lifespan,
-    servers=[{"url": "https://persian-incursion-api.onrender.com"}]
+    servers=[{"url": "https://persian-incursion-api-good.onrender.com"}]
 )
 
 def custom_openapi():
@@ -200,7 +200,7 @@ def custom_openapi():
     )
     # IMPORTANT: add a public https URL here
     schema["servers"] = [
-        {"url": "https://persian-incursion-api.onrender.com", "description": "prod"}
+        {"url": "https://persian-incursion-api-good.onrender.com", "description": "prod"}
     ]
     app.openapi_schema = schema
     return app.openapi_schema
@@ -1620,6 +1620,7 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
+
 
 
 
