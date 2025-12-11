@@ -1395,7 +1395,7 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
 
     # 1) Internal working state: add players/resources, etc.
     work_state = copy.deepcopy(base_state)
-    work_state = _ensure_players_block(work_state))
+    work_state = _ensure_players_block(work_state)
     # 2) Detect side
     target_side = side
     if not target_side:
@@ -1596,6 +1596,7 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
+
 
 
 
