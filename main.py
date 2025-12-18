@@ -2,7 +2,7 @@ import hashlib, json, uuid, importlib, copy, os
 from typing import Any, Dict, List, Optional
 from google.cloud import firestore
 from google.oauth2 import service_account
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Query
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel, Field, ConfigDict
 from fastapi.openapi.utils import get_openapi
@@ -11,7 +11,6 @@ from features import load_action_map, save_action_map
 import time
 from game_engine import GameEngine
 from mcts import MCTSAgent
-from fastapi import Query
 EPISODES: Dict[str, List[dict]] = {}
 _UNIVERSES: Dict[str, Dict[str, Any]] = {}
 
@@ -1372,23 +1371,15 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
     if not ge:
         raise HTTPException(500, "Engine not available.")
 
-
+    def looks_like_game_state(d: Any) -> bool:
         if not isinstance(d, dict):
             return False
+        return any(k in d for k in ("turn","t","as","r","u","bm","swm","ti","o","sd","rvr","active_events_queue"))
         # Compact / engine formats usually have at least one of these:
-        for key in ("turn", "t", "as", "r", "u", "bm", "swm", "ti"):
-            if key in d:
-                return True
-        return False
+        
+    while isinstance(state, dict) and "state" in state and isinstance(state["state"], dict) and not looks_like_game_state(state):
+    state = state["state"]
 
-    while (
-        isinstance(state, dict)
-        and "state" in state
-        and isinstance(state["state"], dict)
-        and not looks_like_game_state(state)
-    ):
-        # Peel one wrapper layer
-        state = state["state"]
 
     # 0) Preserve the original (possibly still compact) state
     base_state = copy.deepcopy(state)
@@ -1400,12 +1391,17 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
     target_side = side
     if not target_side:
         target_side = work_state.get("turn", {}).get("current_player", "israel").lower()
-    target_side = str(target_side).lower()
-    if target_side.startswith("i"):
-        if "s" in target_side[0:2]:
-            target_side = "israel"
-        elif "r" in target_side[0:2]:
-            target_side = "iran"
+    target_side = (side or work_state.get("turn", {}).get("current_player") or work_state.get("turn", {}).get("side") or "israel")
+    target_side = str(target_side).strip()
+    
+    if target_side.lower().startswith("i"):
+        target_side = "israel"
+    elif target_side.lower().startswith("r"):
+        target_side = "iran"
+    else:
+        # fallback
+        target_side = "israel"
+
 
     log_debug_input(game_id, target_side, work_state)
 
@@ -1477,7 +1473,13 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
     )
 
     # IMPORTANT: return the compact state, not the full engine blob
-    return best_action, next_state_compact, gpt_context, done
+    return {
+      "action": best_action,
+      "state": next_state_compact,
+      "gpt_context": gpt_context,
+      "done": done
+    }
+
 
 
 class AIStateOnlyResponse(BaseModel):
@@ -1488,19 +1490,6 @@ class AIStateOnlyResponse(BaseModel):
 
 
 # --- 1. Define the Fully Dynamic Wrapper Model ---
-class AIMoveRequest(BaseModel):
-    game_id: str = Field("default_game", description="The game ID")
-    side: Optional[str] = Field(None, description="Israel or Iran")
-    
-    # The '...' means this field is REQUIRED.
-    # It accepts ANY JSON structure (Dict[str, Any]), so it will work
-    # regardless of how the game state evolves in the future.
-    state: Dict[str, Any] = Field(
-        ..., 
-        description="The full dynamic game state container. Put 'turn', 'r', 'as', etc. inside here."
-    )
-    
-    model_config = ConfigDict(extra="allow")
 
 # --- 2. The Updated Endpoint ---
 @app.post(
@@ -1509,27 +1498,70 @@ class AIMoveRequest(BaseModel):
     summary="RL/MCTS move with dynamic input support",
     description="Expects a JSON body with 'game_id', 'side', and a 'state' object containing the full game data."
 )
-def ai_move(req: AIMoveRequest):
-    # 1. Extract data using the model
-    gid = req.game_id
-    s_arg = req.side
-    
-    # Since we defined 'state' as a Dict in the model, 
-    # we can access it directly. No need for .pop() or checking checks.
-    game_state = req.state 
 
-    # 2. Run the AI Core Logic
-    best_action, next_state, gpt_context, done = run_ai_move_core(
-        gid, s_arg, game_state
-    )
+def ai_move(
+    body: Dict[str, Any] = Body(...),
+    game_id: str = Query("default_game"),
+    side: Optional[str] = Query(None),
+):
+    """
+    Accept BOTH:
+      A) Wrapped: { "game_id":..., "side":..., "state":{...} }
+      B) Raw state: { "turn":..., "r":..., "as":..., ... }
+    Also accept query params game_id/side if provided.
+    """
 
-    return {
-        "action": best_action,
-        "state": next_state,
-        "gpt_context": gpt_context,
-        "done": done,
-    }
-    
+    # 1) Normalize wrapper vs raw body
+    if isinstance(body, dict) and "state" in body and isinstance(body["state"], dict):
+        state = body["state"]
+        game_id = body.get("game_id", game_id)
+        side = body.get("side", side)
+    else:
+        # raw state body
+        state = body
+
+        # allow game_id/side to still be provided in body if connector includes them
+        if isinstance(body, dict):
+            game_id = body.get("game_id", game_id)
+            side = body.get("side", side)
+
+    # 2) If user accidentally sent a full previous response {action,state,...}
+    if isinstance(state, dict) and "state" in state and "action" in state:
+        inner = state.get("state")
+        if isinstance(inner, dict):
+            state = inner
+
+    # 3) Infer side if missing
+    if side is None:
+        try:
+            side = state.get("turn", {}).get("side", "Israel")
+        except Exception:
+            side = "Israel"
+
+    # 4) Basic sanity check (avoid mysterious failures later)
+    if not isinstance(state, dict) or "turn" not in state or "r" not in state:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Bad state payload",
+                "expected": "Either wrapped {game_id, side, state:{...}} or raw state with keys like turn,r,o,as,u...",
+                "received_keys": list(state.keys()) if isinstance(state, dict) else str(type(state)),
+            },
+        )
+
+    # 5) Now call your existing engine logic (whatever you currently do)
+    # Example:
+    # action, next_state, gpt_context, done = ge.compute_ai_move(game_id=game_id, side=side, state=state)
+    # return {"action": action, "state": next_state, "gpt_context": gpt_context, "done": done}
+
+    # Replace this with your actual function call:
+    return run_ai_move_core(game_id=game_id, side=side, state=state)
+
+@app.post("/debug/echo")
+def debug_echo(body: Dict[str, Any] = Body(...)):
+    return {"received_keys": list(body.keys()), "body": body}
+
+
 def _merge_engine_state_into_base(
     base_state: Dict[str, Any],
     engine_state: Dict[str, Any],
@@ -1614,6 +1646,7 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
+
 
 
 
