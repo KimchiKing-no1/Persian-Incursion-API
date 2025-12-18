@@ -126,7 +126,7 @@ def log_transition(game_id, state, side, action, reward, done, info, next_state=
         "side": side,
         "state": state,
         "action": action,
-        "next_state": full_state_after,
+        "next_state": next_state,
         "reward": float(reward),
         "done": bool(done),
         "info": info or {},
@@ -1653,4 +1653,5 @@ def debug_shape(body: Dict[str, Any] = Body(...)):
     wrapped = isinstance(body, dict) and "state" in body
     keys = list(body.keys()) if isinstance(body, dict) else []
     return {"wrapped": wrapped, "top_keys": keys}
+
 
