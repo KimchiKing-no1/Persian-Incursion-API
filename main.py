@@ -1566,14 +1566,12 @@ def ai_move(body: Dict[str, Any] = Body(...)):
 
 @app.post("/debug/echo")
 def debug_echo(body: Dict[str, Any] = Body(...)):
-    out = {
-        "top_keys": list(body.keys()),
-        "has_state": "state" in body,
-        "state_type": type(body.get("state")).__name__ if "state" in body else None,
+    return {
+        "top_keys": list(body.keys()) if isinstance(body, dict) else None,
+        "has_state": isinstance(body, dict) and "state" in body,
+        "state_type": type(body.get("state")).__name__ if isinstance(body, dict) else None,
         "state_keys": list(body["state"].keys()) if isinstance(body.get("state"), dict) else None,
     }
-    return out
-
 
 
 def _merge_engine_state_into_base(
@@ -1666,6 +1664,7 @@ def debug_shape(body: Dict[str, Any] = Body(...)):
     wrapped = isinstance(body, dict) and "state" in body
     keys = list(body.keys()) if isinstance(body, dict) else []
     return {"wrapped": wrapped, "top_keys": keys}
+
 
 
 
