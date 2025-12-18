@@ -1396,9 +1396,6 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
     raw = side or work_state.get("turn", {}).get("current_player") or work_state.get("turn", {}).get("side") or "Israel"
     raw = str(raw).strip().lower()
     target_side = "israel" if raw.startswith("i") else "iran"
-    raw = side or work_state.get("turn", {}).get("current_player") or work_state.get("turn", {}).get("side") or "Israel"
-    raw = str(raw).strip().lower()
-    target_side = "israel" if raw.startswith("i") else "iran"
 
    
 
@@ -1478,7 +1475,7 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
     # IMPORTANT: return the compact state, not the full engine blob
     return {
       "action": best_action,
-      "state": next_state_compact,
+      "state": next_state_out,
       "gpt_context": gpt_context,
       "done": done
     }
@@ -1653,5 +1650,6 @@ def debug_shape(body: Dict[str, Any] = Body(...)):
     wrapped = isinstance(body, dict) and "state" in body
     keys = list(body.keys()) if isinstance(body, dict) else []
     return {"wrapped": wrapped, "top_keys": keys}
+
 
 
