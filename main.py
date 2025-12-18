@@ -20,13 +20,6 @@ from mcts import MCTSAgent
 EPISODES: Dict[str, List[dict]] = {}
 _UNIVERSES: Dict[str, Dict[str, Any]] = {}
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],        # tighten later
-    allow_credentials=True,
-    allow_methods=["*"],        # includes OPTIONS
-    allow_headers=["*"],
-)
 
 # ---------- Firestore client (optional) ----------
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID")
@@ -201,7 +194,13 @@ app = FastAPI(
     lifespan=lifespan,
     servers=[{"url": "https://persian-incursion-api-good.onrender.com"}]
 )
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],        # tighten later
+    allow_credentials=True,
+    allow_methods=["*"],        # includes OPTIONS
+    allow_headers=["*"],
+)
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -1672,6 +1671,7 @@ def debug_shape(body: Dict[str, Any] = Body(...)):
     wrapped = isinstance(body, dict) and "state" in body
     keys = list(body.keys()) if isinstance(body, dict) else []
     return {"wrapped": wrapped, "top_keys": keys}
+
 
 
 
