@@ -121,6 +121,7 @@ def log_transition(game_id, state, side, action, reward, done, info, policy=None
         "side": side,
         "state": state,
         "action": action,
+        "next_state": next_state,
         "reward": float(reward),
         "done": bool(done),
         "info": info or {},
@@ -1387,10 +1388,10 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
     work_state = copy.deepcopy(base_state)
     work_state = _ensure_players_block(work_state)
     # 2) Detect side
-    target_side = side
-    if not target_side:
-        target_side = work_state.get("turn", {}).get("current_player", "israel").lower()
-    target_side = (side or work_state.get("turn", {}).get("current_player") or work_state.get("turn", {}).get("side") or "israel")
+    raw = side or work_state.get("turn", {}).get("current_player") or work_state.get("turn", {}).get("side") or "Israel"
+    raw = str(raw).strip().lower()
+    target_side = "israel" if raw.startswith("i") else "iran"
+
     target_side = str(target_side).strip()
     
     if target_side.lower().startswith("i"):
@@ -1498,11 +1499,9 @@ class AIStateOnlyResponse(BaseModel):
     description="Expects a JSON body with 'game_id', 'side', and a 'state' object containing the full game data."
 )
 
-def ai_move(
-    body: Dict[str, Any] = Body(...),
-    game_id: str = Query("default_game"),
-    side: Optional[str] = Query(None),
-):
+def ai_move(body: Dict[str, Any] = Body(...)):
+    game_id = body.get("game_id", "default_game")
+    side = body.get("side")
     """
     Accept BOTH:
       A) Wrapped: { "game_id":..., "side":..., "state":{...} }
@@ -1645,15 +1644,9 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
-
-
-
-
-
-
-
-
-
-
-
-
+    
+@app.post("/debug/shape")
+def debug_shape(body: Dict[str, Any] = Body(...)):
+    wrapped = isinstance(body, dict) and "state" in body
+    keys = list(body.keys()) if isinstance(body, dict) else []
+    return {"wrapped": wrapped, "top_keys": keys}
