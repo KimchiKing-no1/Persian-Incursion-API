@@ -1,4 +1,9 @@
-import hashlib, json, uuid, importlib, copy, os
+import hashlib
+import json
+import uuid
+import importlib
+import copy
+import os
 from typing import Any, Dict, List, Optional
 from google.cloud import firestore
 from google.oauth2 import service_account
@@ -105,7 +110,7 @@ def log_debug_output(
 
 # -------------------------------------
 
-def log_transition(game_id, state, side, action, reward, done, info, policy=None):
+def log_transition(game_id, state, side, action, reward, done, info, next_state=None, policy=None):
     """
     Save one (s, a, r, done, info, policy) transition.
 
@@ -121,7 +126,7 @@ def log_transition(game_id, state, side, action, reward, done, info, policy=None
         "side": side,
         "state": state,
         "action": action,
-        "next_state": next_state,
+        "next_state": full_state_after,
         "reward": float(reward),
         "done": bool(done),
         "info": info or {},
@@ -1391,16 +1396,11 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
     raw = side or work_state.get("turn", {}).get("current_player") or work_state.get("turn", {}).get("side") or "Israel"
     raw = str(raw).strip().lower()
     target_side = "israel" if raw.startswith("i") else "iran"
+    raw = side or work_state.get("turn", {}).get("current_player") or work_state.get("turn", {}).get("side") or "Israel"
+    raw = str(raw).strip().lower()
+    target_side = "israel" if raw.startswith("i") else "iran"
 
-    target_side = str(target_side).strip()
-    
-    if target_side.lower().startswith("i"):
-        target_side = "israel"
-    elif target_side.lower().startswith("r"):
-        target_side = "iran"
-    else:
-        # fallback
-        target_side = "israel"
+   
 
 
     log_debug_input(game_id, target_side, work_state)
@@ -1427,7 +1427,8 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         raise HTTPException(500, detail=error_msg)
 
     # 3) Project back to your compact 11.json-style state
-    next_state_compact = _project_engine_state_back_to_compact(base_state, full_state_after)
+    next_state_out = _merge_engine_state_into_base(base_state, full_state_after)
+
 
     # 4) RL-style logging using the full engine state
     log_transition(
@@ -1438,8 +1439,10 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
         reward,
         done,
         info,
-        policy,
+        next_state=full_state_after,   # or next_state_compact
+        policy=policy,
     )
+
 
     # 5) Build GPT context from full_state_after (for narrative)
     threats = []
@@ -1650,3 +1653,4 @@ def debug_shape(body: Dict[str, Any] = Body(...)):
     wrapped = isinstance(body, dict) and "state" in body
     keys = list(body.keys()) if isinstance(body, dict) else []
     return {"wrapped": wrapped, "top_keys": keys}
+
