@@ -1500,6 +1500,15 @@ class AIStateOnlyResponse(BaseModel):
 )
 
 def ai_move(body: Dict[str, Any] = Body(...)):
+    print("=== AI_MOVE DEBUG ===")
+    print("TOP LEVEL TYPE:", type(body))
+    if isinstance(body, dict):
+        print("TOP KEYS:", list(body.keys()))
+        if "state" in body:
+            print("STATE TYPE:", type(body["state"]))
+            if isinstance(body["state"], dict):
+                print("STATE KEYS:", list(body["state"].keys()))
+    print("====================")
     game_id = body.get("game_id", "default_game")
     side = body.get("side")
     """
@@ -1657,6 +1666,7 @@ def debug_shape(body: Dict[str, Any] = Body(...)):
     wrapped = isinstance(body, dict) and "state" in body
     keys = list(body.keys()) if isinstance(body, dict) else []
     return {"wrapped": wrapped, "top_keys": keys}
+
 
 
 
