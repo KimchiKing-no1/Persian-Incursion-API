@@ -1374,12 +1374,11 @@ def run_ai_move_core(game_id: str, side: Optional[str], state: Dict[str, Any]):
     def looks_like_game_state(d: Any) -> bool:
         if not isinstance(d, dict):
             return False
-        return any(k in d for k in ("turn","t","as","r","u","bm","swm","ti","o","sd","rvr","active_events_queue"))
-        # Compact / engine formats usually have at least one of these:
-        
-    while isinstance(state, dict) and "state" in state and isinstance(state["state"], dict) and not looks_like_game_state(state):
-    state = state["state"]
+        return any(k in d for k in ("turn","t","r","o","as","u","bm","swm","ti","sd","rvr","active_events_queue"))
 
+    # Unwrap nested wrappers safely (if any)
+    while isinstance(state, dict) and "state" in state and isinstance(state["state"], dict) and not looks_like_game_state(state):
+        state = state["state"]
 
     # 0) Preserve the original (possibly still compact) state
     base_state = copy.deepcopy(state)
@@ -1646,6 +1645,7 @@ def _merge_engine_state_into_base(
                 out["turn"] = eng_num
 
     return out
+
 
 
 
