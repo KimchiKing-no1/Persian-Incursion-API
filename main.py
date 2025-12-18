@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException, Body, Query
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel, Field, ConfigDict
 from fastapi.openapi.utils import get_openapi
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from features import load_action_map, save_action_map
 import time
@@ -19,6 +20,13 @@ from mcts import MCTSAgent
 EPISODES: Dict[str, List[dict]] = {}
 _UNIVERSES: Dict[str, Dict[str, Any]] = {}
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],        # tighten later
+    allow_credentials=True,
+    allow_methods=["*"],        # includes OPTIONS
+    allow_headers=["*"],
+)
 
 # ---------- Firestore client (optional) ----------
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID")
@@ -1664,6 +1672,7 @@ def debug_shape(body: Dict[str, Any] = Body(...)):
     wrapped = isinstance(body, dict) and "state" in body
     keys = list(body.keys()) if isinstance(body, dict) else []
     return {"wrapped": wrapped, "top_keys": keys}
+
 
 
 
